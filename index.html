@@ -1,0 +1,2801 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Архитектор Процессов</title>
+    <!-- BPMN.io стили -->
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/bpmn-js.css" />
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/diagram-js.css" />
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/bpmn-font/css/bpmn.css" />
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-color: #f3f4f6;
+            --text-color: #1f2937;
+            --dialog-bg: rgba(255, 255, 255, 0.95);
+            --dialog-border: rgba(255, 255, 255, 0.3);
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            background-image:
+                radial-gradient(circle at top right, #e0e7ff 0%, transparent 40%),
+                radial-gradient(circle at bottom left, #dbeafe 0%, transparent 40%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-color);
+            overflow: hidden;
+        }
+
+        /* Главная кнопка */
+        .primary-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 16px;
+            font-weight: 500;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1), 0 2px 4px -1px rgba(79, 70, 229, 0.06);
+            transition: all 0.2s ease-in-out;
+            outline: none;
+        }
+
+        .primary-btn:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2), 0 4px 6px -2px rgba(79, 70, 229, 0.1);
+        }
+
+        .primary-btn:active {
+            transform: translateY(0);
+        }
+
+        .primary-btn.secondary {
+            background-color: white;
+            color: var(--primary-color);
+            border: 2px solid var(--primary-color);
+        }
+
+        .primary-btn.secondary:hover {
+            background-color: #f3f4f6;
+        }
+
+        .main-buttons-container {
+            display: flex;
+            gap: 16px;
+        }
+
+        /* Оверлей модального окна */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(17, 24, 39, 0.4);
+            backdrop-filter: blur(6px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+            z-index: 50;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Контент модального окна (первое окно) */
+        #validationModal .modal-content {
+            background: var(--dialog-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--dialog-border);
+            border-radius: 20px;
+            padding: 32px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            transform: scale(0.95) translateY(10px);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Контент модального окна (второе окно - максимизированное) */
+        #secondModal .modal-content {
+            background: var(--dialog-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--dialog-border);
+            border-radius: 20px;
+            padding: 24px 32px;
+            width: 96vw;
+            height: 96vh;
+            max-width: none;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            transform: scale(0.95) translateY(10px);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: scale(1) translateY(0);
+        }
+
+        .modal-header {
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .modal-title {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        /* Тело окна: контейнер для панелей со сплиттером */
+        .modal-body {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+            position: relative;
+        }
+
+        /* Левая часть: Форма и таблица */
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            width: 450px;
+            flex-shrink: 0;
+        }
+
+        /* Splitter (Разделитель) */
+        .splitter {
+            width: 16px;
+            cursor: col-resize;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            flex-shrink: 0;
+            background-color: transparent;
+            transition: background-color 0.2s;
+            position: relative;
+            margin: 0 4px;
+        }
+
+        .splitter:hover,
+        .splitter.active {
+            background-color: rgba(79, 70, 229, 0.15);
+        }
+
+        .splitter::after {
+            content: '';
+            width: 4px;
+            height: 48px;
+            background-color: #d1d5db;
+            border-radius: 2px;
+            transition: background-color 0.2s, height 0.2s;
+        }
+
+        .splitter:hover::after,
+        .splitter.active::after {
+            background-color: var(--primary-color);
+            height: 72px;
+        }
+
+        /* Кнопка управления шторкой (свернуть/развернуть левую панель) */
+        .toggle-panel-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 28px;
+            height: 28px;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 11;
+            color: #4b5563;
+            transition: all 0.2s;
+        }
+
+        .toggle-panel-btn:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            transform: translate(-50%, -50%) scale(1.1);
+            box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2);
+        }
+
+        /* Иконка стрелочки влево/вправо */
+        .toggle-icon {
+            display: block;
+            width: 0;
+            height: 0;
+            border-top: 5px solid transparent;
+            border-bottom: 5px solid transparent;
+            border-right: 7px solid currentColor;
+            transition: transform 0.3s;
+        }
+
+        /* Когда панель свернута, стрелка смотрит вправо */
+        .panel-collapsed .toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        /* Правая часть: схема BPMN и таблица отклонений */
+        .right-panel {
+            flex: 1;
+            min-width: 0;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            background-color: #fcfcfc;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: row;
+        }
+
+        .center-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .right-sidebar {
+            display: flex;
+            flex-direction: row;
+            flex-shrink: 0;
+            background-color: #ffffff;
+            border-left: 1px solid #e5e7eb;
+            z-index: 15;
+        }
+
+        .toolbar {
+            width: 48px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px 0;
+            background-color: #f9fafb;
+            z-index: 20;
+        }
+
+        .toolbar-btn {
+            width: 36px;
+            height: 36px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #4b5563;
+            transition: all 0.2s;
+        }
+
+        .toolbar-btn:hover,
+        .toolbar-btn.active {
+            background-color: #e0e7ff;
+            color: var(--primary-color);
+        }
+
+        .properties-panel {
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            transition: width 0.3s ease;
+            overflow: hidden;
+            background-color: #ffffff;
+            border-left: 1px solid #e5e7eb;
+        }
+
+        .properties-panel.collapsed {
+            width: 0;
+            border-left: none;
+        }
+
+        .properties-header {
+            padding: 16px;
+            border-bottom: 1px solid #e5e7eb;
+            background-color: #f9fafb;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
+        .properties-header h3 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .properties-body {
+            padding: 16px;
+            flex: 1;
+            overflow-y: auto;
+            min-width: 320px;
+            box-sizing: border-box;
+        }
+
+        .bpmn-container {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+            background-image:
+                linear-gradient(rgba(229, 231, 235, 0.5) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(229, 231, 235, 0.5) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .bottom-panel {
+            flex: 0 0 auto;
+            height: 250px;
+            border-top: 1px solid #e5e7eb;
+            border-left: none;
+            border-right: none;
+            border-bottom: none;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        .bottom-panel.collapsed {
+            display: none;
+        }
+
+        /* Splitter горизонтальный (Разделитель) */
+        .splitter-horizontal {
+            height: 16px;
+            cursor: row-resize;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            flex-shrink: 0;
+            background-color: transparent;
+            transition: background-color 0.2s;
+            position: relative;
+            margin: 4px 0;
+        }
+
+        .splitter-horizontal:hover,
+        .splitter-horizontal.active {
+            background-color: rgba(79, 70, 229, 0.15);
+        }
+
+        .splitter-horizontal::after {
+            content: '';
+            height: 4px;
+            width: 48px;
+            background-color: #d1d5db;
+            border-radius: 2px;
+            transition: background-color 0.2s, width 0.2s;
+        }
+
+        .splitter-horizontal:hover::after,
+        .splitter-horizontal.active::after {
+            background-color: var(--primary-color);
+            width: 72px;
+        }
+
+        /* Кнопка управления горизонтальной шторкой */
+        .toggle-panel-btn-horizontal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 28px;
+            height: 28px;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 11;
+            color: #4b5563;
+            transition: all 0.2s;
+        }
+
+        .toggle-panel-btn-horizontal:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            transform: translate(-50%, -50%) scale(1.1);
+            box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2);
+        }
+
+        /* Иконка стрелочки вверх/вниз */
+        .toggle-icon-horizontal {
+            display: block;
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 7px solid currentColor;
+            transition: transform 0.3s;
+        }
+
+        /* Когда панель свернута, стрелка смотрит вверх */
+        .panel-collapsed-horizontal .toggle-icon-horizontal {
+            transform: rotate(180deg);
+        }
+
+        #bpmn-canvas {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            outline: none;
+        }
+
+        /* Сворачивание левой панели (шторка) */
+        .left-panel.collapsed {
+            display: none;
+        }
+
+        /* Элементы внутри левой панели */
+        .form-row {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-shrink: 0;
+        }
+
+        .form-group {
+            width: 100%;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #4b5563;
+        }
+
+        .form-input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            font-size: 14px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background-color: white;
+            outline: none;
+            color: #111827;
+        }
+
+        textarea.form-input {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        #versionInput {
+            font-size: 18px;
+            font-family: monospace;
+            letter-spacing: 1px;
+        }
+
+        .form-input::placeholder {
+            color: #9ca3af;
+        }
+
+        .form-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15);
+        }
+
+        .form-input:read-only {
+            background-color: #f3f4f6;
+            color: #6b7280;
+            cursor: not-allowed;
+            border-color: #e5e7eb;
+        }
+
+        .form-input:read-only:focus {
+            border-color: #e5e7eb;
+            box-shadow: none;
+        }
+
+        /* Панель с таблицей */
+        .panel {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background-color: #f9fafb;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .panel-title {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .panel-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn {
+            background-color: white;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-weight: 600;
+            color: #4b5563;
+            transition: all 0.2s;
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        .action-btn:hover {
+            background-color: #f3f4f6;
+            color: #111827;
+            border-color: #9ca3af;
+        }
+
+        .action-btn:active {
+            transform: scale(0.95);
+        }
+
+        .table-container {
+            flex: 1;
+            overflow: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            min-width: 500px;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            border-right: 1px solid #e5e7eb;
+            text-align: left;
+            word-break: break-word;
+            vertical-align: middle;
+        }
+
+        .data-table th:last-child,
+        .data-table td:last-child {
+            border-right: none;
+        }
+
+        .data-table th {
+            background-color: #f9fafb;
+            font-weight: 500;
+            color: #6b7280;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .data-table th:nth-child(1) {
+            width: 15%;
+        }
+
+        .data-table th:nth-child(2) {
+            width: 30%;
+        }
+
+        .data-table th:nth-child(3) {
+            width: 15%;
+        }
+
+        .data-table th:nth-child(4) {
+            width: 20%;
+        }
+
+        .data-table th:nth-child(5) {
+            width: 20%;
+        }
+
+        .data-table tbody tr {
+            transition: background-color 0.15s;
+            cursor: pointer;
+        }
+
+        .data-table tbody tr:hover {
+            background-color: #f3f4f6;
+        }
+
+        .data-table tbody tr.selected {
+            background-color: #e0e7ff;
+        }
+
+        .data-table td[contenteditable="true"] {
+            outline: none;
+            cursor: text;
+        }
+
+        .data-table td[contenteditable="true"]:focus {
+            background-color: #f0fdf4;
+            box-shadow: inset 0 0 0 2px var(--primary-color);
+        }
+
+        .table-select,
+        .form-select {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            background-color: transparent;
+            font-family: var(--font-family);
+            font-size: 13px;
+            color: #111827;
+            cursor: pointer;
+            outline: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%239CA3AF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px top 50%;
+            background-size: 10px auto;
+        }
+
+        .form-select {
+            border: 1px solid #d1d5db;
+            padding: 12px 16px;
+            border-radius: 12px;
+            background-position: right 16px top 50%;
+            font-size: 14px;
+        }
+
+        .table-select:focus,
+        .form-select:focus {
+            background-color: #ffffff;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 24px;
+            flex-shrink: 0;
+            padding-top: 16px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .btn {
+            padding: 10px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            outline: none;
+        }
+
+        .btn-cancel {
+            background-color: white;
+            color: #4b5563;
+            border: 1px solid #d1d5db;
+        }
+
+        .btn-cancel:hover {
+            background-color: #f9fafb;
+            color: #111827;
+            border-color: #9ca3af;
+        }
+
+        .btn-ok {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-ok:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-ok:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .empty-state {
+            padding: 24px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 13px;
+            font-style: italic;
+            white-space: nowrap;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* --- Стили для BPMN Оверлеев --- */
+
+        /* Скрываем нативные кнопки bpmn-js в режиме валидации */
+        .mode-validation .djs-palette,
+        .mode-validation .djs-context-pad {
+            display: none !important;
+        }
+
+        /* Всплывающее окно над элементом BPMN */
+        .bpmn-popup {
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            width: 280px;
+            z-index: 100;
+            font-family: var(--font-family);
+            pointer-events: auto;
+        }
+
+        .bpmn-popup-title {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .bpmn-popup .form-group {
+            margin-bottom: 12px;
+        }
+
+        .bpmn-popup .form-label {
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .bpmn-popup .form-input,
+        .bpmn-popup .form-select {
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+
+        .bpmn-popup-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .bpmn-popup .btn {
+            padding: 6px 16px;
+            font-size: 12px;
+        }
+
+        /* --- Стили для желтой лампочки (маркера) и списка отклонений --- */
+        .bpmn-warning-triangle {
+            width: 24px;
+            height: 24px;
+            background-color: transparent;
+            color: #eab308;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            cursor: pointer;
+            pointer-events: auto;
+            transform: translate(-50%, -50%);
+            transition: transform 0.15s, filter 0.15s;
+            z-index: 5;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+        }
+
+        .bpmn-warning-triangle.hidden {
+            display: none;
+        }
+
+        .bpmn-warning-triangle:hover {
+            transform: translate(-50%, -50%) scale(1.2);
+            filter: drop-shadow(0 4px 6px rgba(234, 179, 8, 0.5));
+        }
+
+        .bpmn-warning-popup {
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            width: 250px;
+            z-index: 100;
+            font-family: var(--font-family);
+            pointer-events: auto;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .bpmn-warning-item {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 8px;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .bpmn-warning-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .bpmn-warning-item.severity-error {
+            border-left: 3px solid #ef4444;
+        }
+
+        .bpmn-warning-item.severity-warning {
+            border-left: 3px solid #84cc16;
+            /* салатовый цвет (lime-500) */
+        }
+
+        .bpmn-warning-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 4px;
+            gap: 8px;
+        }
+
+        .bpmn-warning-item-desc {
+            font-weight: 500;
+            color: #111827;
+            flex-grow: 1;
+            word-break: break-word;
+        }
+
+        .bpmn-warning-item-del-btn {
+            background-color: transparent;
+            color: #ef4444;
+            border: 1px solid #fca5a5;
+            border-radius: 4px;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            font-size: 14px;
+            line-height: 1;
+            padding: 0;
+            transition: all 0.2s;
+        }
+
+        .bpmn-warning-item-del-btn:hover {
+            background-color: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .bpmn-warning-item-sev {
+            font-size: 11px;
+            color: #6b7280;
+        }
+
+        /* --- Стили для режима симуляции (Отладки) --- */
+        .simulate-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 40px;
+            height: 40px;
+            background-color: #10b981;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            z-index: 50;
+            transition: all 0.2s;
+        }
+
+        .simulate-btn:hover {
+            background-color: #059669;
+            transform: scale(1.05);
+        }
+
+        .simulate-btn.active {
+            background-color: #ef4444;
+            /* Кнопка Stop */
+        }
+
+        .bug-btn {
+            position: absolute;
+            top: 16px;
+            right: 64px;
+            width: 40px;
+            height: 40px;
+            background-color: #f59e0b;
+            /* Amber */
+            color: white;
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            z-index: 50;
+            transition: all 0.2s;
+        }
+
+        .bug-btn:hover {
+            background-color: #d97706;
+            transform: scale(1.05);
+        }
+
+        /* Подсветка токена (активного элемента, ожидающего клика) */
+        .sim-active:not(.djs-connection) .djs-visual> :nth-child(1) {
+            stroke: #3b82f6 !important;
+            /* Синяя обводка */
+            stroke-width: 3px !important;
+            fill: #eff6ff !important;
+            cursor: pointer !important;
+        }
+
+        /* Подсветка активной стрелки (для выбора пути после шлюза) */
+        .sim-active.djs-connection .djs-visual>path {
+            stroke: #3b82f6 !important;
+            stroke-width: 4px !important;
+            cursor: pointer !important;
+        }
+
+        .sim-active.djs-connection .djs-visual marker path {
+            fill: #3b82f6 !important;
+            stroke: #3b82f6 !important;
+            cursor: pointer !important;
+        }
+
+        /* Выделение невидимой области (хитбокса) стрелки для удобного клика */
+        .sim-active.djs-connection .djs-hit {
+            cursor: pointer !important;
+        }
+
+        /* Анимация пульсации для активного токена (в том числе для стрелок) */
+        @keyframes tokenPulse {
+            0% {
+                filter: drop-shadow(0 0 0 rgba(59, 130, 246, 0.4));
+            }
+
+            50% {
+                filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8));
+            }
+
+            100% {
+                filter: drop-shadow(0 0 0 rgba(59, 130, 246, 0.4));
+            }
+        }
+
+        .sim-active {
+            animation: tokenPulse 1.5s infinite;
+        }
+
+        /* Подсветка пройденного элемента */
+        .sim-passed:not(.djs-connection) .djs-visual> :nth-child(1) {
+            stroke: #10b981 !important;
+            /* Зеленая обводка */
+            stroke-width: 3px !important;
+            fill: #ecfdf5 !important;
+        }
+
+        /* Подсветка пройденного пути (стрелки) */
+        .sim-passed.djs-connection .djs-visual>path {
+            stroke: #10b981 !important;
+            stroke-width: 3px !important;
+        }
+
+        /* Маркер на конце стрелки (закрашиваем в зеленый) */
+        .sim-passed.djs-connection .djs-visual marker path {
+            fill: #10b981 !important;
+            stroke: #10b981 !important;
+        }
+
+        /* --- Стили для ИИ-чата (DeepSeek) --- */
+        .ai-chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid #e5e7eb;
+            background-color: #ffffff;
+            overflow: hidden;
+            min-height: 250px;
+        }
+
+        .ai-chat-header {
+            padding: 12px 16px;
+            background-color: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .ai-chat-title {
+            font-weight: 600;
+            font-size: 14px;
+            color: #374151;
+        }
+
+        .ai-chat-status {
+            font-size: 12px;
+            color: #10b981;
+            font-weight: 500;
+        }
+
+        .ai-chat-messages {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background-color: #fcfcfc;
+        }
+
+        .ai-message {
+            display: flex;
+            flex-direction: column;
+            max-width: 85%;
+        }
+
+        .ai-message.user {
+            align-self: flex-end;
+        }
+
+        .ai-message.assistant {
+            align-self: flex-start;
+        }
+
+        .message-content {
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        .ai-message.user .message-content {
+            background-color: var(--primary-color);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .ai-message.assistant .message-content {
+            background-color: #f3f4f6;
+            color: #1f2937;
+            border-bottom-left-radius: 4px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .message-rating {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+            padding-left: 4px;
+        }
+
+        .rate-btn {
+            background: none;
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-size: 14px;
+            color: #9ca3af;
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+            opacity: 0.6;
+        }
+
+        .rate-btn:hover {
+            background-color: #f3f4f6;
+            border-color: #d1d5db;
+            opacity: 1;
+        }
+
+        .rate-btn.active {
+            opacity: 1;
+            background-color: #dbeafe;
+            border-color: #93c5fd;
+        }
+
+        .ai-chat-input-area {
+            display: flex;
+            padding: 12px;
+            gap: 8px;
+            border-top: 1px solid #e5e7eb;
+            background-color: #ffffff;
+            flex-shrink: 0;
+            align-items: flex-end;
+        }
+
+        .ai-chat-input {
+            flex: 1;
+            resize: none;
+            border: 1px solid #d1d5db;
+            border-radius: 20px;
+            padding: 10px 16px;
+            font-size: 14px;
+            line-height: 1.4;
+            max-height: 120px;
+            min-height: 20px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+            overflow-y: hidden;
+        }
+
+        .ai-chat-input:focus {
+            border-color: var(--primary-color);
+        }
+
+        .ai-chat-send-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .ai-chat-send-btn:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+        }
+
+        .ai-chat-send-btn:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+
+        .ai-chat-send-btn:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Контейнер для главных кнопок -->
+    <div class="main-buttons-container">
+        <!-- Главная кнопка -->
+        <button id="createTaskBtn" class="primary-btn">Создать задачу валидации</button>
+        <!-- Вторая кнопка -->
+        <button id="designProcessBtn" class="primary-btn">Спроектировать процесс</button>
+    </div>
+
+    <!-- Первое модальное окно: Ввод версии -->
+    <div id="validationModal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 420px; height: auto;">
+            <div class="modal-header">
+                <h2 class="modal-title">Новая задача валидации</h2>
+            </div>
+            <div class="form-group" style="margin-bottom: 32px;">
+                <label for="versionInput" class="form-label">Укажите версию процесса для валидации</label>
+                <input type="text" id="versionInput" class="form-input" placeholder="П____-__-__.__">
+            </div>
+            <div class="modal-actions" style="border-top: none; padding-top: 0; margin-top: 0;">
+                <button id="cancelBtn" class="btn btn-cancel">Отмена</button>
+                <button id="okBtn" class="btn btn-ok" disabled>Ок</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Второе модальное окно: Валидация процесса -->
+    <div id="secondModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="secondModalTitle">Валидация</h2>
+            </div>
+
+            <div class="modal-body">
+                <!-- Левая панель (Шторка) -->
+                <div class="left-panel" id="leftPanel">
+                    <div class="form-row">
+                        <div class="form-group" id="architectGroup">
+                            <label for="architectInput" class="form-label">Архитектор процессов</label>
+                            <input type="text" id="architectInput" class="form-input"
+                                value="Иванов Иван Иванович <Ivanov.I@mail.ru>" readonly>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="designerInput" class="form-label">Проектировщик</label>
+                            <input type="text" id="designerInput" class="form-input"
+                                value="Петрова Светлана Петровна <Petrova.S@mail.ru>" readonly>
+                        </div>
+                    </div>
+
+                    <!-- Чат с ИИ (DeepSeek) -->
+                    <div class="ai-chat-container">
+                        <div class="ai-chat-header">
+                            <span class="ai-chat-title">Ассистент DeepSeek</span>
+                            <span class="ai-chat-status">● Готов</span>
+                        </div>
+                        <div class="ai-chat-messages" id="aiChatMessages">
+                            <div class="ai-message assistant">
+                                <div class="message-content">Здравствуйте! Я ваш ИИ-помощник DeepSeek. Чем могу помочь в
+                                    проектировании процесса?</div>
+                                <div class="message-rating">
+                                    <button class="rate-btn up" title="Хороший ответ">👍🏻</button>
+                                    <button class="rate-btn down" title="Плохой ответ">👎🏻</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ai-chat-input-area">
+                            <textarea id="aiChatInput" class="ai-chat-input" rows="1"
+                                placeholder="Задайте вопрос DeepSeek..."></textarea>
+                            <button id="aiChatSendBtn" class="ai-chat-send-btn" title="Отправить" disabled>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Splitter -->
+                <div class="splitter" id="splitter">
+                    <div class="toggle-panel-btn" id="togglePanelBtn" title="Свернуть/Развернуть панель">
+                        <i class="toggle-icon"></i>
+                    </div>
+                </div>
+
+                <!-- Правая панель для BPMN и таблицы -->
+                <div class="right-panel" id="rightPanel">
+                    <div class="center-content">
+                        <div class="bpmn-container" id="bpmnContainer" style="flex: 1; min-height: 0;">
+                            <button id="simulateBtn" class="simulate-btn" title="Отладка">▶</button>
+                            <button id="bugBtn" class="bug-btn" title="Поиск отклонений (в разработке)">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="m8 2 1.88 1.88" />
+                                    <path d="M14.12 3.88 16 2" />
+                                    <path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1" />
+                                    <path
+                                        d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6" />
+                                    <path d="M12 20v-9" />
+                                    <path d="M6.53 9C4.6 8.8 3 7.1 3 5" />
+                                    <path d="M17.47 9c1.93-.2 3.53-1.9 3.53-4" />
+                                    <path d="M4 15h3" />
+                                    <path d="M17 15h3" />
+                                    <path d="M6.53 21c-1.93.2-3.53 1.9-3.53 4" />
+                                    <path d="M17.47 21c1.93.2 3.53 1.9 3.53 4" />
+                                </svg>
+                            </button>
+                            <div id="bpmn-canvas"></div>
+                        </div>
+
+                        <!-- Splitter горизонтальный -->
+                        <div class="splitter-horizontal" id="splitterHorizontal">
+                            <div class="toggle-panel-btn-horizontal" id="togglePanelBtnHorizontal"
+                                title="Свернуть/Развернуть панель">
+                                <i class="toggle-icon-horizontal"></i>
+                            </div>
+                        </div>
+
+                        <!-- Панель "Отклонения" -->
+                        <div class="panel bottom-panel" id="bottomPanel">
+                            <div class="panel-header">
+                                <h3 class="panel-title">Отклонения</h3>
+                                <div class="panel-actions" id="deviationActions">
+                                    <button id="addDeviationBtn" class="action-btn" title="Добавить строку">+</button>
+                                    <button id="removeDeviationBtn" class="action-btn"
+                                        title="Удалить выделенную строку">-</button>
+                                </div>
+                            </div>
+                            <div class="table-container">
+                                <table id="deviationsTable" class="data-table hidden">
+                                    <thead>
+                                        <tr>
+                                            <th>Код</th>
+                                            <th>Описание</th>
+                                            <th>Тип</th>
+                                            <th>Название</th>
+                                            <th>Критичность</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Строки добавляются через JS -->
+                                    </tbody>
+                                </table>
+                                <div id="emptyTableState" class="empty-state">Нет данных об отклонениях. Нажмите "+" для
+                                    добавления строки.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Правая боковая панель (Тулбар + Свойства) -->
+                    <div class="right-sidebar" id="rightSidebar">
+                        <!-- Тулбар -->
+                        <div class="toolbar">
+                            <button id="togglePropertiesBtn" class="toolbar-btn" title="Свойства объекта">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        <!-- Панель свойств -->
+                        <div class="properties-panel collapsed" id="propertiesPanel">
+                            <div class="properties-header">
+                                <h3>Свойства</h3>
+                            </div>
+                            <div class="properties-body">
+                                <div class="empty-state" id="propertiesEmptyState">
+                                    Выберите элемент на схеме
+                                </div>
+                                <div id="propertiesContent" class="hidden">
+                                    <div class="form-group" style="margin-bottom: 16px;">
+                                        <label class="form-label">Тип</label>
+                                        <input type="text" id="propType" class="form-input" readonly>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 16px;">
+                                        <label class="form-label">Название</label>
+                                        <input type="text" id="propName" class="form-input" readonly>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Описание</label>
+                                        <textarea id="propDesc" class="form-input" readonly></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Подвал с кнопками -->
+            <div class="modal-actions">
+                <button id="secondCancelBtn" class="btn btn-cancel">Отмена</button>
+                <button id="saveBtn" class="btn btn-cancel">Сохранить</button>
+                <button id="executeBtn" class="btn btn-ok">Выполнить валидацию</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Попап для просмотра отклонений -->
+    <template id="bpmnWarningPopupTemplate">
+        <div class="bpmn-warning-popup">
+            <h4 class="bpmn-popup-title" style="margin-bottom: 8px;">Список отклонений</h4>
+            <div class="bpmn-warning-list">
+                <!-- Сюда будут добавляться отклонения -->
+            </div>
+            <div class="bpmn-popup-actions" style="margin-top: 12px;">
+                <button class="btn btn-cancel popup-close-btn" style="width: 100%;">Закрыть</button>
+            </div>
+        </div>
+    </template>
+
+    <!-- Всплывающий диалог создания отклонения на схеме BPMN -->
+    <template id="bpmnDeviationPopupTemplate">
+        <div class="bpmn-popup">
+            <h4 class="bpmn-popup-title">Создать отклонение</h4>
+            <div class="form-group">
+                <label class="form-label">Описание отклонения</label>
+                <textarea class="form-input bpmn-popup-desc" placeholder="Введите суть проблемы..."></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Категория критичности</label>
+                <select class="form-select bpmn-popup-severity">
+                    <option value="error">Ошибка</option>
+                    <option value="warning">Рекомендация</option>
+                </select>
+            </div>
+            <div class="bpmn-popup-actions">
+                <button class="btn btn-cancel popup-cancel-btn">Отмена</button>
+                <button class="btn btn-ok popup-save-btn">Сохранить</button>
+            </div>
+        </div>
+    </template>
+
+
+    <!-- BPMN.io скрипт -->
+    <script src="https://unpkg.com/bpmn-js@17.0.2/dist/bpmn-modeler.development.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const bpmnViewer = new BpmnJS({
+                container: '#bpmn-canvas'
+            });
+
+            const userBpmnXml = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="sid-38422fae-e03e-43a3-bef4-bd33b32041b2" targetNamespace="http://bpmn.io/bpmn" exporter="bpmn-js (https://demo.bpmn.io)" exporterVersion="18.12.0">
+  <process id="Process_1" isExecutable="false">
+    <startEvent id="StartEvent_1y45yut" name="Выполнение валидации БО процесса">
+      <outgoing>SequenceFlow_0h21x7r</outgoing>
+    </startEvent>
+    <sequenceFlow id="SequenceFlow_0h21x7r" sourceRef="StartEvent_1y45yut" targetRef="Task_1hcentk" />
+    <exclusiveGateway id="ExclusiveGateway_15hu1pt">
+      <incoming>Flow_0frxwqi</incoming>
+      <outgoing>Flow_1bk8wmq</outgoing>
+      <outgoing>Flow_18v11sc</outgoing>
+    </exclusiveGateway>
+    <sequenceFlow id="SequenceFlow_0wnb4ke" sourceRef="Task_1hcentk" targetRef="Gateway_0hhzieo" />
+    <sequenceFlow id="Flow_1g167cr" sourceRef="Activity_01orbol" targetRef="Activity_19oz5ve" />
+    <exclusiveGateway id="Gateway_0hhzieo">
+      <incoming>SequenceFlow_0wnb4ke</incoming>
+      <incoming>Flow_18v11sc</incoming>
+      <outgoing>Flow_0v8ogoh</outgoing>
+    </exclusiveGateway>
+    <sequenceFlow id="Flow_0v8ogoh" sourceRef="Gateway_0hhzieo" targetRef="Activity_01orbol" />
+    <sequenceFlow id="Flow_0frxwqi" sourceRef="Activity_19oz5ve" targetRef="ExclusiveGateway_15hu1pt" />
+    <endEvent id="Event_0d51lgi" name="Валидация выполнена">
+      <incoming>Flow_1bk8wmq</incoming>
+    </endEvent>
+    <sequenceFlow id="Flow_1bk8wmq" name="Согласовано/согласовано с замечанием" sourceRef="ExclusiveGateway_15hu1pt" targetRef="Event_0d51lgi" />
+    <sequenceFlow id="Flow_18v11sc" name="Не согласовано" sourceRef="ExclusiveGateway_15hu1pt" targetRef="Gateway_0hhzieo" />
+    <userTask id="Task_1hcentk" name="Создать задачу валидации">
+      <incoming>SequenceFlow_0h21x7r</incoming>
+      <outgoing>SequenceFlow_0wnb4ke</outgoing>
+    </userTask>
+    <serviceTask id="Activity_01orbol" name="Выполнение Автоматизированного этапа валидации">
+      <incoming>Flow_0v8ogoh</incoming>
+      <outgoing>Flow_1g167cr</outgoing>
+    </serviceTask>
+    <userTask id="Activity_19oz5ve" name="Выполнение экспертного этапа валидации">
+      <incoming>Flow_1g167cr</incoming>
+      <outgoing>Flow_0frxwqi</outgoing>
+    </userTask>
+  </process>
+  <bpmndi:BPMNDiagram id="BpmnDiagram_1">
+    <bpmndi:BPMNPlane id="BpmnPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="StartEvent_1y45yut_di" bpmnElement="StartEvent_1y45yut">
+        <omgdc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="133" y="225" width="75" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_0hhzieo_di" bpmnElement="Gateway_0hhzieo" isMarkerVisible="true">
+        <omgdc:Bounds x="365" y="175" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ExclusiveGateway_15hu1pt_di" bpmnElement="ExclusiveGateway_15hu1pt" isMarkerVisible="true">
+        <omgdc:Bounds x="775" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="988" y="152" width="66" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0d51lgi_di" bpmnElement="Event_0d51lgi">
+        <omgdc:Bounds x="972" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="962" y="225" width="57" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0dkn0zz_di" bpmnElement="Task_1hcentk">
+        <omgdc:Bounds x="240" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0f62c69_di" bpmnElement="Activity_01orbol">
+        <omgdc:Bounds x="450" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0iqh56f_di" bpmnElement="Activity_19oz5ve">
+        <omgdc:Bounds x="610" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="SequenceFlow_0h21x7r_di" bpmnElement="SequenceFlow_0h21x7r">
+        <omgdi:waypoint x="188" y="200" />
+        <omgdi:waypoint x="240" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SequenceFlow_0wnb4ke_di" bpmnElement="SequenceFlow_0wnb4ke">
+        <omgdi:waypoint x="340" y="200" />
+        <omgdi:waypoint x="365" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1g167cr_di" bpmnElement="Flow_1g167cr">
+        <omgdi:waypoint x="550" y="200" />
+        <omgdi:waypoint x="610" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0v8ogoh_di" bpmnElement="Flow_0v8ogoh">
+        <omgdi:waypoint x="415" y="200" />
+        <omgdi:waypoint x="450" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0frxwqi_di" bpmnElement="Flow_0frxwqi">
+        <omgdi:waypoint x="710" y="200" />
+        <omgdi:waypoint x="775" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1bk8wmq_di" bpmnElement="Flow_1bk8wmq">
+        <omgdi:waypoint x="825" y="200" />
+        <omgdi:waypoint x="972" y="200" />
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="856" y="150" width="86" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_18v11sc_di" bpmnElement="Flow_18v11sc">
+        <omgdi:waypoint x="800" y="175" />
+        <omgdi:waypoint x="800" y="100" />
+        <omgdi:waypoint x="390" y="100" />
+        <omgdi:waypoint x="390" y="170" />
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="555" y="82" width="81" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>`;
+
+            const emptyBpmnXml = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn2:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xsi:schemaLocation="http://www.omg.org/spec/BPMN/20100524/MODEL BPMN20.xsd" id="sample-diagram" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn2:process id="Process_1" isExecutable="false">
+    <bpmn2:startEvent id="StartEvent_1"/>
+  </bpmn2:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1">
+        <dc:Bounds height="36.0" width="36.0" x="412.0" y="240.0"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn2:definitions>`;
+
+            // Переменная для хранения активного Popup
+            let activePopupId = null;
+
+            const renderBpmn = async (mode) => {
+                try {
+                    const xmlToLoad = mode === 'design' ? emptyBpmnXml : userBpmnXml;
+                    await bpmnViewer.importXML(xmlToLoad);
+                    bpmnViewer.get('canvas').zoom('fit-viewport', 'auto');
+
+                    // После рендера добавляем логику кнопок "+"
+                    setupBpmnInteraction();
+
+                } catch (err) {
+                    console.error('Ошибка рендеринга BPMN', err);
+                }
+            };
+
+            const getElementTypeRussian = (type) => {
+                if (type.includes('StartEvent')) return 'Стартовое событие';
+                if (type.includes('EndEvent')) return 'Конечное событие';
+                if (type.includes('Task')) return 'Операция (Задача)';
+                if (type.includes('Gateway')) return 'Шлюз';
+                if (type.includes('SequenceFlow')) return 'Поток управления';
+                return 'Элемент';
+            }
+
+            // Хранилище отклонений с привязкой к ID элемента BPMN
+            const elementDeviations = {};
+
+            const setupBpmnInteraction = () => {
+                const elementRegistry = bpmnViewer.get('elementRegistry');
+                const overlays = bpmnViewer.get('overlays');
+                const eventBus = bpmnViewer.get('eventBus');
+
+                // Получаем все графические элементы (задачи, шлюзы, события) исключаем соединения
+                const elements = elementRegistry.filter(e => !e.type.includes('SequenceFlow') && !e.type.includes('Process') && !e.type.includes('label'));
+
+                // Словарь для хранения ID оверлеев с плюсами для каждого элемента
+                const btnOverlayMap = {};
+
+                // Функция для закрытия активного popup'а
+                const closePopup = () => {
+                    if (activePopupId) {
+                        overlays.remove({ id: activePopupId });
+                        activePopupId = null;
+                    }
+                };
+
+                // --- Более надежный способ вызова попапа отклонения ---
+                // Клик правой кнопкой мыши по элементу (contextmenu) вызовет меню создания
+                eventBus.on('element.contextmenu', (e) => {
+                    e.originalEvent.preventDefault(); // Запрещаем стандартное контекстное меню браузера
+                    const element = e.element;
+
+                    // Пропускаем стрелки, сам процесс и лейблы
+                    if (element.type.includes('SequenceFlow') || element.type === 'bpmn:Process' || element.type === 'label') {
+                        return;
+                    }
+
+                    closePopup(); // Закрываем старые попапы
+
+                    // Создаем скрытую лампочку (если её еще нет)
+                    if (!btnOverlayMap[element.id]) {
+                        const warnTriangle = document.createElement('div');
+                        warnTriangle.className = 'bpmn-warning-triangle hidden';
+                        warnTriangle.innerHTML = '💡';
+                        warnTriangle.title = 'Просмотр отклонений';
+
+                        // Получаем размеры элемента, чтобы положить лампочку в ПРАВЫЙ ВЕРХНИЙ угол
+                        const bBox = element; // у него есть x, y, width, height
+                        const markerX = bBox.width ? bBox.width : 50;
+
+                        const warnOverlayId = overlays.add(element.id, 'warning-triangle', {
+                            position: { top: -12, left: markerX - 10 },
+                            html: warnTriangle
+                        });
+
+                        btnOverlayMap[element.id] = {
+                            warnNode: warnTriangle
+                        };
+
+                        warnTriangle.addEventListener('click', (ev) => {
+                            ev.stopPropagation();
+                            closePopup();
+                            if (!elementDeviations[element.id] || elementDeviations[element.id].length === 0) return;
+
+                            const template = document.getElementById('bpmnWarningPopupTemplate');
+                            const popupContent = template.content.cloneNode(true).firstElementChild;
+                            const listContainer = popupContent.querySelector('.bpmn-warning-list');
+
+                            const renderDeviationsList = () => {
+                                listContainer.innerHTML = '';
+
+                                if (!elementDeviations[element.id] || elementDeviations[element.id].length === 0) {
+                                    closePopup();
+                                    return;
+                                }
+
+                                elementDeviations[element.id].forEach(dev => {
+                                    const item = document.createElement('div');
+                                    item.className = `bpmn-warning-item severity-${dev.severity}`;
+                                    const sevText = dev.severity === 'error' ? 'Ошибка' : 'Рекомендация';
+
+                                    item.innerHTML = `
+                                        <div class="bpmn-warning-item-header">
+                                            <div class="bpmn-warning-item-desc">${escapeHtml(dev.desc)}</div>
+                                            <button class="bpmn-warning-item-del-btn" title="Удалить отклонение">-</button>
+                                        </div>
+                                        <div class="bpmn-warning-item-sev"><span style="font-family: monospace; font-weight: 600;">${dev.code}</span> / ${sevText}</div>
+                                    `;
+
+                                    // Обработка удаления прямо из списка
+                                    const delBtn = item.querySelector('.bpmn-warning-item-del-btn');
+                                    delBtn.addEventListener('click', () => {
+                                        // 1. Ищем строку в таблице по id из data-row-id
+                                        const tableRow = document.querySelector(`tr[data-row-id="${dev.id}"]`);
+                                        if (tableRow) {
+                                            tableRow.remove();
+                                            checkEmptyState();
+                                        }
+
+                                        // 2. Удаляем из памяти элемента
+                                        elementDeviations[element.id] = elementDeviations[element.id].filter(d => d.id !== dev.id);
+
+                                        // 3. Обновляем UI: если нет больше отклонений, прячем лампочку
+                                        if (elementDeviations[element.id].length === 0) {
+                                            warnTriangle.classList.add('hidden');
+                                            closePopup();
+                                        } else {
+                                            // 4. Перерисовываем список
+                                            renderDeviationsList();
+                                        }
+                                    });
+
+                                    listContainer.appendChild(item);
+                                });
+                            };
+
+                            renderDeviationsList();
+
+                            const closeBtn = popupContent.querySelector('.popup-close-btn');
+                            closeBtn.addEventListener('click', closePopup);
+
+                            activePopupId = overlays.add(element.id, 'warning-popup', {
+                                position: { top: -50, left: 40 },
+                                html: popupContent
+                            });
+                        });
+                    }
+
+                    // Открываем попап добавления
+                    const template = document.getElementById('bpmnDeviationPopupTemplate');
+                    const popupContent = template.content.cloneNode(true).firstElementChild;
+
+                    const cancelBtn = popupContent.querySelector('.popup-cancel-btn');
+                    const saveBtnPopup = popupContent.querySelector('.popup-save-btn');
+                    const descInput = popupContent.querySelector('.bpmn-popup-desc');
+                    const severitySelect = popupContent.querySelector('.bpmn-popup-severity');
+
+                    cancelBtn.addEventListener('click', closePopup);
+
+                    saveBtnPopup.addEventListener('click', () => {
+                        const desc = descInput.value.trim();
+                        const severity = severitySelect.value;
+                        const objType = getElementTypeRussian(element.type);
+                        const objName = element.businessObject.name || element.id;
+
+                        const rowId = 'dev_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+
+                        if (!elementDeviations[element.id]) {
+                            elementDeviations[element.id] = [];
+                        }
+                        elementDeviations[element.id].push({
+                            id: rowId,
+                            code: 'ERR-H',
+                            desc: desc,
+                            severity: severity,
+                            bpmnElementId: element.id
+                        });
+
+                        btnOverlayMap[element.id].warnNode.classList.remove('hidden');
+                        addDeviationRow(desc, objType, objName, severity, rowId, element.id);
+
+                        closePopup();
+
+                        const tableContainer = document.querySelector('.table-container');
+                        tableContainer.scrollTop = tableContainer.scrollHeight;
+                    });
+
+                    activePopupId = overlays.add(element.id, 'deviation-popup', {
+                        position: {
+                            top: -40,
+                            left: element.width ? element.width + 10 : 40
+                        },
+                        html: popupContent
+                    });
+
+                    setTimeout(() => popupContent.querySelector('.bpmn-popup-desc').focus(), 50);
+                });
+
+                // Закрывать попап при клике по холсту (дополнительно)
+                eventBus.on('element.click', (e) => {
+                    closePopup();
+                });
+
+                // ---- РЕЖИМ СИМУЛЯЦИИ (ОТЛАДКИ) ----
+                const simulateBtn = document.getElementById('simulateBtn');
+                let isSimulationMode = false;
+                let activeElements = []; // Элементы, ожидающие клика (с "токенами")
+                let passedElements = []; // Пройденные элементы (узлы и связи)
+                const canvas = bpmnViewer.get('canvas');
+
+                const resetSimulationStyles = () => {
+                    [...activeElements, ...passedElements].forEach(elementId => {
+                        canvas.removeMarker(elementId, 'sim-active');
+                        canvas.removeMarker(elementId, 'sim-passed');
+                    });
+                    activeElements = [];
+                    passedElements = [];
+                };
+
+                const activateElement = (elementId) => {
+                    // Если элемент уже был пройден (мы вернулись по циклу), сбрасываем его статус "пройденного"
+                    if (passedElements.includes(elementId)) {
+                        passedElements = passedElements.filter(id => id !== elementId);
+                        canvas.removeMarker(elementId, 'sim-passed');
+                    }
+
+                    if (!activeElements.includes(elementId)) {
+                        activeElements.push(elementId);
+                        canvas.addMarker(elementId, 'sim-active');
+                    }
+                };
+
+                const passElement = (elementId) => {
+                    // Убираем из активных
+                    activeElements = activeElements.filter(id => id !== elementId);
+                    canvas.removeMarker(elementId, 'sim-active');
+
+                    // Добавляем в пройденные
+                    if (!passedElements.includes(elementId)) {
+                        passedElements.push(elementId);
+                        canvas.addMarker(elementId, 'sim-passed');
+                    }
+                };
+
+                simulateBtn.addEventListener('click', () => {
+                    isSimulationMode = !isSimulationMode;
+
+                    if (isSimulationMode) {
+                        simulateBtn.classList.add('active');
+                        simulateBtn.innerHTML = '⏹';
+                        simulateBtn.title = 'Остановить отладку';
+                        resetSimulationStyles();
+
+                        // Ищем все стартовые события, чтобы начать симуляцию
+                        const startEvents = elementRegistry.filter(e => e.type === 'bpmn:StartEvent');
+                        startEvents.forEach(e => activateElement(e.id));
+                    } else {
+                        simulateBtn.classList.remove('active');
+                        simulateBtn.innerHTML = '▶';
+                        simulateBtn.title = 'Отладка';
+                        resetSimulationStyles();
+                    }
+                });
+
+                // Обработка клика по элементу во время симуляции
+                eventBus.on('element.click', (e) => {
+                    if (!isSimulationMode) return;
+
+                    const element = e.element;
+
+                    // Если кликнули по элементу с токеном
+                    if (activeElements.includes(element.id)) {
+
+                        // Если кликнули по активной стрелке (выбор ветви для XOR шлюза)
+                        if (element.type === 'bpmn:SequenceFlow') {
+                            passElement(element.id); // Стрелка закрашивается зеленым
+
+                            // Деактивируем альтернативные пути (соседние стрелки из этого же шлюза)
+                            if (element.source && element.source.type === 'bpmn:ExclusiveGateway') {
+                                element.source.outgoing.forEach(outFlow => {
+                                    if (outFlow.id !== element.id && activeElements.includes(outFlow.id)) {
+                                        activeElements = activeElements.filter(id => id !== outFlow.id);
+                                        canvas.removeMarker(outFlow.id, 'sim-active');
+                                    }
+                                });
+                            }
+
+                            // Передаем токен следующему узлу
+                            if (element.target) {
+                                activateElement(element.target.id);
+                            }
+                            return;
+                        }
+
+
+                        passElement(element.id); // Отмечаем обычный текущий узел как пройденный
+
+                        // Активируем исходящие пути
+                        if (element.outgoing) {
+                            if (element.type === 'bpmn:ExclusiveGateway' && element.outgoing.length > 1) {
+                                // Если это шлюз с ветвлением - ожидаем от пользователя выбора самой стрелки!
+                                element.outgoing.forEach(sequenceFlow => {
+                                    activateElement(sequenceFlow.id); // Делаем стрелки синими
+                                });
+                            } else {
+                                // Для всех прочих узлов проходим стрелку автоматически
+                                element.outgoing.forEach(sequenceFlow => {
+                                    passElement(sequenceFlow.id);
+
+                                    if (sequenceFlow.target) {
+                                        activateElement(sequenceFlow.target.id); // Токен на следующий узел
+                                    }
+                                });
+                            }
+                        }
+                    }
+                });
+            };
+
+            // ---- Динамическое изменение размеров (Splitter Drag-and-Drop) ----
+            const leftPanel = document.getElementById('leftPanel');
+            const rightPanel = document.getElementById('rightPanel');
+            const splitter = document.getElementById('splitter');
+            const togglePanelBtn = document.getElementById('togglePanelBtn');
+            const modalBody = document.querySelector('.modal-body');
+
+            let isResizing = false;
+            let currentWidth = 450;
+
+            const initResize = () => {
+                const containerWidth = modalBody.clientWidth;
+                if (containerWidth > 0 && currentWidth > containerWidth * 0.5) {
+                    currentWidth = Math.max(containerWidth * 0.4, 250);
+                }
+                leftPanel.style.width = `${currentWidth}px`;
+                if (typeof initResizeHorizontal === 'function') initResizeHorizontal();
+            };
+
+            let animationFrameId = null;
+            const resizeBpmn = () => {
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                animationFrameId = requestAnimationFrame(() => {
+                    const canvas = bpmnViewer.get('canvas');
+                    if (canvas) canvas.resized();
+                });
+            };
+
+            splitter.addEventListener('mousedown', (e) => {
+                if (e.target === togglePanelBtn || togglePanelBtn.contains(e.target)) return;
+
+                if (leftPanel.classList.contains('collapsed')) {
+                    leftPanel.classList.remove('collapsed');
+                    splitter.classList.remove('panel-collapsed');
+                }
+
+                isResizing = true;
+                splitter.classList.add('active');
+
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                rightPanel.style.pointerEvents = 'none';
+
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+
+                const containerRect = modalBody.getBoundingClientRect();
+
+                let newWidth = e.clientX - containerRect.left - (splitter.offsetWidth / 2);
+
+                const minLeftWidth = 200;
+                const minRightWidth = 300;
+                const maxLeftWidth = containerRect.width - minRightWidth - splitter.offsetWidth;
+
+                if (newWidth < minLeftWidth) {
+                    newWidth = minLeftWidth;
+                } else if (newWidth > maxLeftWidth) {
+                    newWidth = maxLeftWidth;
+                }
+
+                leftPanel.style.width = `${newWidth}px`;
+                currentWidth = newWidth;
+
+                rightPanel.style.flex = "1";
+
+                resizeBpmn();
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    splitter.classList.remove('active');
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    rightPanel.style.pointerEvents = '';
+
+                    setTimeout(resizeBpmn, 0);
+                }
+            });
+
+            togglePanelBtn.addEventListener('click', () => {
+                const isCollapsed = leftPanel.classList.contains('collapsed');
+
+                if (isCollapsed) {
+                    leftPanel.classList.remove('collapsed');
+                    leftPanel.style.width = `${currentWidth}px`;
+                    splitter.classList.remove('panel-collapsed');
+                    splitter.style.cursor = 'col-resize';
+                } else {
+                    leftPanel.classList.add('collapsed');
+                    splitter.classList.add('panel-collapsed');
+                    splitter.style.cursor = 'default';
+                }
+                setTimeout(resizeBpmn, 50);
+            });
+
+            // ---- Динамическое изменение размеров (Горизонтальный Splitter) ----
+            const bottomPanel = document.getElementById('bottomPanel');
+            const bpmnContainer = document.getElementById('bpmnContainer'); // topPanel
+            const splitterHorizontal = document.getElementById('splitterHorizontal');
+            const togglePanelBtnHorizontal = document.getElementById('togglePanelBtnHorizontal');
+            const centerContent = document.querySelector('.center-content'); // container
+
+            let isResizingHorizontal = false;
+
+            // Функция (если нужна для первоначальной отрисовки)
+            const initResizeHorizontal = () => { };
+            window.initResizeHorizontal = initResizeHorizontal;
+
+            function handleMouseMoveHorizontal(e) {
+                if (!isResizingHorizontal) return;
+
+                // Расчет новой высоты
+                const containerRect = centerContent.getBoundingClientRect();
+                let newHeight = e.clientY - containerRect.top;
+
+                // Ограничения (Constraints)
+                const minHeight = 200; // Миним. высота верхней панели (BPMN)
+                const maxHeight = containerRect.height - 100; // Миним. высота нижней панели 100px
+
+                if (newHeight > minHeight && newHeight < maxHeight) {
+                    bpmnContainer.style.flex = "none";
+                    bpmnContainer.style.height = `${newHeight}px`;
+                    bottomPanel.style.flex = "1";     // Нижняя панель занимает оставшееся место
+                    bottomPanel.style.height = "auto";
+
+                    resizeBpmn(); // Сообщаем BPMN-канвасу, что размер изменился
+                }
+            }
+
+            function stopResizingHorizontal() {
+                if (isResizingHorizontal) {
+                    isResizingHorizontal = false;
+                    splitterHorizontal.classList.remove('active');
+                    document.removeEventListener('mousemove', handleMouseMoveHorizontal);
+                    document.removeEventListener('mouseup', stopResizingHorizontal);
+
+                    document.body.style.cursor = 'default';
+                    document.body.style.userSelect = '';
+                    bpmnContainer.style.pointerEvents = '';
+                    bottomPanel.style.pointerEvents = '';
+
+                    setTimeout(resizeBpmn, 0);
+                }
+            }
+
+            splitterHorizontal.addEventListener('mousedown', (e) => {
+                if (e.target === togglePanelBtnHorizontal || togglePanelBtnHorizontal.contains(e.target)) return;
+
+                if (bottomPanel.classList.contains('collapsed')) {
+                    bottomPanel.classList.remove('collapsed');
+                    splitterHorizontal.classList.remove('panel-collapsed-horizontal');
+                    bpmnContainer.style.flex = "none";
+                    bottomPanel.style.flex = "1";
+                }
+
+                isResizingHorizontal = true;
+                splitterHorizontal.classList.add('active');
+
+                // Добавляем класс для предотвращения выделения текста при движении
+                document.body.style.cursor = 'row-resize';
+                document.body.style.userSelect = 'none';
+                bpmnContainer.style.pointerEvents = 'none';
+                bottomPanel.style.pointerEvents = 'none';
+
+                document.addEventListener('mousemove', handleMouseMoveHorizontal);
+                document.addEventListener('mouseup', stopResizingHorizontal);
+
+                e.preventDefault();
+            });
+
+            togglePanelBtnHorizontal.addEventListener('click', () => {
+                const isCollapsed = bottomPanel.classList.contains('collapsed');
+
+                if (isCollapsed) {
+                    bottomPanel.classList.remove('collapsed');
+                    bpmnContainer.style.flex = "none";
+                    bottomPanel.style.flex = "1";
+                    splitterHorizontal.classList.remove('panel-collapsed-horizontal');
+                    splitterHorizontal.style.cursor = 'row-resize';
+                } else {
+                    bottomPanel.classList.add('collapsed');
+                    bpmnContainer.style.flex = "1";
+                    bpmnContainer.style.height = "auto";
+                    splitterHorizontal.classList.add('panel-collapsed-horizontal');
+                    splitterHorizontal.style.cursor = 'default';
+                }
+                setTimeout(resizeBpmn, 50);
+            });
+
+            // ---- Логика панели свойств ----
+            const togglePropertiesBtn = document.getElementById('togglePropertiesBtn');
+            const propertiesPanel = document.getElementById('propertiesPanel');
+            const propTypeInput = document.getElementById('propType');
+            const propNameInput = document.getElementById('propName');
+            const propDescInput = document.getElementById('propDesc');
+            const propertiesEmptyState = document.getElementById('propertiesEmptyState');
+            const propertiesContent = document.getElementById('propertiesContent');
+            let currentSelectionId = null;
+
+            togglePropertiesBtn.addEventListener('click', () => {
+                propertiesPanel.classList.toggle('collapsed');
+                togglePropertiesBtn.classList.toggle('active');
+                setTimeout(resizeBpmn, 300);
+            });
+
+            // Подписка на клик по элементам для свойств
+            bpmnViewer.get('eventBus').on('element.click', (e) => {
+                const element = e.element;
+                // Игнорируем сам холст (процесс) или надписи (label)
+                if (element.type === 'bpmn:Process' || element.type === 'label') {
+                    propertiesEmptyState.classList.remove('hidden');
+                    propertiesContent.classList.add('hidden');
+                    return;
+                }
+
+                propertiesEmptyState.classList.add('hidden');
+                propertiesContent.classList.remove('hidden');
+
+                // Если панель свернута, то можем ее автоматически развернуть при желании
+                // но пока оставим выбор пользователю, просто заполняем данные
+
+                currentSelectionId = element.id;
+                propTypeInput.value = getElementTypeRussian(element.type);
+                propNameInput.value = element.businessObject.name || '';
+
+                // Проверяем наличие описания
+                const docs = element.businessObject.documentation;
+                if (docs && docs.length > 0) {
+                    propDescInput.value = docs[0].text;
+                } else {
+                    propDescInput.value = '';
+                }
+            });
+
+            // Обратная связь: обновление схемы при редактировании свойств
+            propNameInput.addEventListener('change', (e) => {
+                if (!currentSelectionId || propNameInput.readOnly) return;
+                const elementRegistry = bpmnViewer.get('elementRegistry');
+                const modeling = bpmnViewer.get('modeling');
+                const targetEl = elementRegistry.get(currentSelectionId);
+
+                if (targetEl && modeling) {
+                    modeling.updateProperties(targetEl, {
+                        name: e.target.value
+                    });
+                }
+            });
+
+            propDescInput.addEventListener('change', (e) => {
+                if (!currentSelectionId || propDescInput.readOnly) return;
+                const elementRegistry = bpmnViewer.get('elementRegistry');
+                const modeling = bpmnViewer.get('modeling');
+                const bpmnFactory = bpmnViewer.get('bpmnFactory');
+                const targetEl = elementRegistry.get(currentSelectionId);
+
+                if (targetEl && modeling && bpmnFactory) {
+                    const newDoc = bpmnFactory.create('bpmn:Documentation', {
+                        text: e.target.value
+                    });
+                    modeling.updateProperties(targetEl, {
+                        documentation: [newDoc]
+                    });
+                }
+            });
+
+            // Вспомогательная функция для экранирования HTML (перенесена в общую область)
+            const escapeHtml = (unsafe) => {
+                return (unsafe || '').toString()
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            };
+
+            // ---- Элементы первого окна ----
+            const openBtn = document.getElementById('createTaskBtn');
+            const closeBtn = document.getElementById('cancelBtn');
+            const okBtn = document.getElementById('okBtn');
+            const validationModal = document.getElementById('validationModal');
+            const input = document.getElementById('versionInput');
+
+            // ---- Элементы второго окна ----
+            const secondModal = document.getElementById('secondModal');
+            const secondModalTitle = document.getElementById('secondModalTitle');
+            const secondCancelBtn = document.getElementById('secondCancelBtn');
+            const saveBtn = document.getElementById('saveBtn');
+            const executeBtn = document.getElementById('executeBtn');
+
+            // ---- Элементы таблицы отклонений ----
+            const manualAddDevBtn = document.getElementById('addDeviationBtn');
+            const removeDevBtn = document.getElementById('removeDeviationBtn');
+            const devTableContainer = document.querySelector('.table-container');
+            const devTableBody = document.querySelector('#deviationsTable tbody');
+            const emptyTableState = document.getElementById('emptyTableState');
+            const devTable = document.getElementById('deviationsTable');
+            let selectedRow = null;
+
+
+            // Функция добавления строки в таблицу
+            const addDeviationRow = (desc = '', type = '', name = '', severity = 'error', rowId = null, bpmnElementId = null) => {
+                const tr = document.createElement('tr');
+
+                // Если нет ID строки, генерируем, значит добавлено вручную кнопкой над таблицей
+                if (!rowId) {
+                    rowId = 'dev_' + Date.now();
+                }
+
+                // Прописываем данные для связи в дата-атрибуты
+                tr.dataset.rowId = rowId;
+                if (bpmnElementId) {
+                    tr.dataset.bpmnElementId = bpmnElementId;
+                }
+
+                tr.innerHTML = `
+                    <td class="readonly-cell" style="cursor: not-allowed; background-color: #f9fafb; font-family: monospace;">ERR-H</td>
+                    <td contenteditable="true">${escapeHtml(desc)}</td>
+                    <td contenteditable="true">${escapeHtml(type)}</td>
+                    <td contenteditable="true">${escapeHtml(name)}</td>
+                    <td>
+                        <select class="table-select">
+                            <option value="error" ${severity === 'error' ? 'selected' : ''}>Ошибка</option>
+                            <option value="warning" ${severity === 'warning' ? 'selected' : ''}>Рекомендация</option>
+                        </select>
+                    </td>
+                `;
+                devTableBody.appendChild(tr);
+
+                checkEmptyState();
+
+                // Слушатель изменения выпадающего списка критичности (чтобы синхронизировать со схемой)
+                const selectElement = tr.querySelector('.table-select');
+                selectElement.addEventListener('change', (e) => {
+                    if (tr.dataset.bpmnElementId && elementDeviations[tr.dataset.bpmnElementId]) {
+                        const targetDev = elementDeviations[tr.dataset.bpmnElementId].find(d => d.id === tr.dataset.rowId);
+                        if (targetDev) {
+                            targetDev.severity = e.target.value;
+                        }
+                    }
+                });
+
+                // Слушатель изменения текста описания (чтобы синхронизировать со схемой)
+                const descCell = tr.querySelector('td:nth-child(2)');
+                descCell.addEventListener('blur', (e) => {
+                    if (tr.dataset.bpmnElementId && elementDeviations[tr.dataset.bpmnElementId]) {
+                        const targetDev = elementDeviations[tr.dataset.bpmnElementId].find(d => d.id === tr.dataset.rowId);
+                        if (targetDev) {
+                            targetDev.desc = e.target.innerText;
+                        }
+                    }
+                });
+
+                if (!desc && !type && !name) {
+                    tr.querySelector('td[contenteditable="true"]').focus();
+                } else {
+                    tr.style.animation = 'highlight 1.5s ease';
+                }
+            };
+
+            const style = document.createElement('style');
+            style.innerHTML = `@keyframes highlight { 0% { background-color: #fef08a; } 100% { background-color: transparent; } }`;
+            document.head.appendChild(style);
+
+            // Обработчик кнопки "+" над таблицей (ручное добавление)
+            manualAddDevBtn.addEventListener('click', () => {
+                addDeviationRow();
+                devTableContainer.scrollTop = devTableContainer.scrollHeight;
+            });
+
+
+            // ---- Логика первого окна ----
+            let prevValue = '';
+
+            openBtn.addEventListener('click', () => {
+                input.value = 'П';
+                prevValue = 'П';
+                validateInput();
+                validationModal.classList.add('active');
+
+                setTimeout(() => {
+                    input.focus();
+                    const len = input.value.length;
+                    input.setSelectionRange(len, len);
+                }, 100);
+            });
+
+            const closeValidationModal = () => {
+                validationModal.classList.remove('active');
+            };
+
+            closeBtn.addEventListener('click', closeValidationModal);
+            validationModal.addEventListener('click', (e) => {
+                if (e.target === validationModal) closeValidationModal();
+            });
+
+            input.addEventListener('input', (e) => {
+                let val = input.value;
+                const isDeletion = val.length < prevValue.length;
+                if (!val.startsWith('П')) val = 'П' + val.replace(/[^0-9]/g, '');
+                let digits = val.substring(1).replace(/[^0-9]/g, '');
+
+                if (isDeletion && (prevValue.endsWith('-') || prevValue.endsWith('.')) && val.length === prevValue.length - 1) {
+                    digits = digits.slice(0, -1);
+                }
+
+                let formatted = 'П';
+                if (digits.length > 0) formatted += digits.substring(0, 4);
+                if (digits.length >= 4) formatted += '-';
+                if (digits.length > 4) formatted += digits.substring(4, 6);
+                if (digits.length >= 6) formatted += '-';
+                if (digits.length > 6) formatted += digits.substring(6, 8);
+                if (digits.length >= 8) formatted += '.';
+                if (digits.length > 8) formatted += digits.substring(8, 10);
+
+                input.value = formatted;
+                prevValue = formatted;
+                validateInput();
+            });
+
+            input.addEventListener('focus', () => {
+                const len = input.value.length;
+                setTimeout(() => input.setSelectionRange(len, len), 0);
+            });
+            input.addEventListener('click', () => {
+                const len = input.value.length;
+                input.setSelectionRange(len, len);
+            });
+            input.addEventListener('keydown', (e) => {
+                if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) e.preventDefault();
+                if (e.key === 'Backspace' && input.value === 'П') e.preventDefault();
+            });
+
+            const validateInput = () => {
+                okBtn.disabled = input.value.length !== 14;
+            };
+
+            const architectGroup = document.getElementById('architectGroup');
+            const deviationActions = document.getElementById('deviationActions');
+
+            const openSecondModal = (title, mode) => {
+                secondModalTitle.textContent = title;
+                closeValidationModal();
+
+                // Очищаем историю чата с ИИ при открытии диалога
+                if (window.clearAiChat) window.clearAiChat();
+
+                // Конфигурация в зависимости от режима
+                const bpmnContainer = document.getElementById('bpmnContainer');
+                if (mode === 'design') {
+                    bpmnContainer.classList.add('mode-design');
+                    bpmnContainer.classList.remove('mode-validation');
+
+                    architectGroup.classList.add('hidden');
+                    deviationActions.classList.add('hidden');
+                    if (executeBtn) executeBtn.classList.add('hidden');
+
+                    const propTypeInput = document.getElementById('propType');
+                    const propNameInput = document.getElementById('propName');
+                    const propDescInput = document.getElementById('propDesc');
+                    if (propTypeInput) propTypeInput.readOnly = false;
+                    if (propNameInput) propNameInput.readOnly = false;
+                    if (propDescInput) propDescInput.readOnly = false;
+
+                    // Очищаем таблицу
+                    devTableBody.innerHTML = '';
+                    checkEmptyState();
+                } else {
+                    bpmnContainer.classList.add('mode-validation');
+                    bpmnContainer.classList.remove('mode-design');
+
+                    architectGroup.classList.remove('hidden');
+                    deviationActions.classList.remove('hidden');
+                    if (executeBtn) executeBtn.classList.remove('hidden');
+
+                    const propTypeInput = document.getElementById('propType');
+                    const propNameInput = document.getElementById('propName');
+                    const propDescInput = document.getElementById('propDesc');
+                    if (propTypeInput) propTypeInput.readOnly = true;
+                    if (propNameInput) propNameInput.readOnly = true;
+                    if (propDescInput) propDescInput.readOnly = true;
+                }
+
+                // Задаем минимальный размер панели "Отклонения" при загрузке 
+                const bottomPanel = document.getElementById('bottomPanel');
+                if (bottomPanel) {
+                    bottomPanel.style.flex = "none";
+                    bottomPanel.style.height = "150px";
+                }
+                const bpmnContainerEl = document.getElementById('bpmnContainer');
+                if (bpmnContainerEl) {
+                    bpmnContainerEl.style.flex = "1";
+                    bpmnContainerEl.style.height = "auto";
+                }
+
+                setTimeout(() => {
+                    secondModal.classList.add('active');
+                    initResize();
+                    renderBpmn(mode);
+                }, 150);
+            };
+
+            okBtn.addEventListener('click', () => {
+                const version = input.value;
+                openSecondModal(`Валидация ${version}`, 'validation');
+            });
+
+            // Кнопка спроектировать процесс
+            const designBtn = document.getElementById('designProcessBtn');
+            designBtn.addEventListener('click', () => {
+                openSecondModal('Проектирование процесса', 'design');
+            });
+
+            // ---- Логика второго окна ----
+
+            const closeSecondModal = () => {
+                secondModal.classList.remove('active');
+            };
+
+            secondCancelBtn.addEventListener('click', closeSecondModal);
+
+            secondModal.addEventListener('click', (e) => {
+                if (e.target === secondModal) closeSecondModal();
+            });
+
+            saveBtn.addEventListener('click', () => alert('Данные сохранены'));
+            executeBtn.addEventListener('click', () => alert('Валидация запущена'));
+
+            // ---- Вспомогательная логика таблицы ----
+
+            const checkEmptyState = () => {
+                if (devTableBody.children.length === 0) {
+                    emptyTableState.classList.remove('hidden');
+                    devTable.classList.add('hidden');
+                } else {
+                    emptyTableState.classList.add('hidden');
+                    devTable.classList.remove('hidden');
+                }
+            };
+
+            devTableBody.addEventListener('click', (e) => {
+                if (e.target.tagName === 'SELECT') return;
+
+                const td = e.target.closest('td');
+                const tr = e.target.closest('tr');
+                if (!tr) return;
+
+                if (selectedRow) {
+                    selectedRow.classList.remove('selected');
+                }
+
+                if (selectedRow === tr) {
+                    selectedRow = null;
+                } else {
+                    selectedRow = tr;
+                    selectedRow.classList.add('selected');
+                }
+            });
+
+            removeDevBtn.addEventListener('click', () => {
+                if (selectedRow) {
+                    // Проверяем, привязана ли строка к элементу на холсте
+                    const elementId = selectedRow.dataset.bpmnElementId;
+                    const rowId = selectedRow.dataset.rowId;
+
+                    if (elementId && rowId && elementDeviations[elementId]) {
+                        // Удаляем данные из словаря отклонений BPMN
+                        elementDeviations[elementId] = elementDeviations[elementId].filter(dev => dev.id !== rowId);
+
+                        // Если для элемента отклонений больше нет, прячем желтый треугольник
+                        // К этому моменту bpmnViewer может быть еще в процессе рендера, 
+                        // поэтому лучше просто попробовать найти оверлей в DOM
+                        if (elementDeviations[elementId].length === 0) {
+                            const overlays = bpmnViewer.get('overlays');
+                            const overlayElements = overlays.get({ element: elementId, type: 'warning-triangle' });
+
+                            overlayElements.forEach(overlay => {
+                                if (overlay.html) overlay.html.classList.add('hidden');
+                            });
+                        }
+                    }
+
+                    selectedRow.remove();
+                    selectedRow = null;
+                    checkEmptyState();
+                } else {
+                    if (devTableBody.children.length > 0) {
+                        alert('Пожалуйста, выделите строку (кликнув по ней мышью) для её удаления.');
+                    }
+                }
+            });
+
+            // ---- Логика ИИ-чата (DeepSeek) ----
+            const aiChatInput = document.getElementById('aiChatInput');
+            const aiChatSendBtn = document.getElementById('aiChatSendBtn');
+            const aiChatMessages = document.getElementById('aiChatMessages');
+
+            if (aiChatInput && aiChatSendBtn && aiChatMessages) {
+                aiChatInput.addEventListener('input', function () {
+                    this.style.height = 'auto';
+                    this.style.height = (this.scrollHeight) + 'px';
+                    if (this.scrollHeight > 120) {
+                        this.style.overflowY = 'auto';
+                    } else {
+                        this.style.overflowY = 'hidden';
+                    }
+                    aiChatSendBtn.disabled = this.value.trim().length === 0;
+                });
+
+                aiChatInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (this.value.trim().length > 0) {
+                            sendAiMessage();
+                        }
+                    }
+                });
+
+                const appendMessage = (role, text, id = null) => {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = `ai-message ${role}`;
+                    if (id) msgDiv.id = id;
+
+                    let innerHtml = `<div class="message-content">${escapeHtml(text)}</div>`;
+
+                    if (role === 'assistant' && !id) {
+                        innerHtml += `
+                            <div class="message-rating">
+                                <button class="rate-btn up" title="Хороший ответ">👍🏻</button>
+                                <button class="rate-btn down" title="Плохой ответ">👎🏻</button>
+                            </div>
+                        `;
+                    }
+
+                    msgDiv.innerHTML = innerHtml;
+                    aiChatMessages.appendChild(msgDiv);
+
+                    if (role === 'assistant' && !id) {
+                        setupRatingButtons(msgDiv);
+                    }
+
+                    aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+                };
+
+                const setupRatingButtons = (msgDiv) => {
+                    const upBtn = msgDiv.querySelector('.rate-btn.up');
+                    const downBtn = msgDiv.querySelector('.rate-btn.down');
+
+                    if (upBtn && downBtn) {
+                        upBtn.addEventListener('click', () => {
+                            upBtn.classList.toggle('active');
+                            downBtn.classList.remove('active');
+                        });
+
+                        downBtn.addEventListener('click', () => {
+                            downBtn.classList.toggle('active');
+                            upBtn.classList.remove('active');
+                        });
+                    }
+                };
+
+                // Системный промпт для настройки контекста ИИ агента DeepSeek
+                const SYSTEM_PROMPT = `Ты эксперт по бизнес-процессам и нотации BPMN. 
+Твоя задача — проектировать процессы по описанию пользователя и возвращать валидный XML-код в формате BPMN 2.0, совместимый с библиотекой bpmn.io. 
+Обязательно оборачивай генерируемый XML-код в маркеры \`\`\`xml и \`\`\`. Не используй другие форматы для кода.
+Все элементы должны иметь корректные id и быть перечислены в секции <bpmndi:BPMNDiagram>.`;
+
+                // Хранилище истории переписки с ИИ-агентом
+                let aiChatContext = [
+                    { role: "system", content: SYSTEM_PROMPT }
+                ];
+
+                window.clearAiChat = () => {
+                    aiChatContext = [
+                        { role: "system", content: SYSTEM_PROMPT }
+                    ];
+                    if (aiChatMessages) {
+                        aiChatMessages.innerHTML = `
+                            <div class="ai-message assistant">
+                                <div class="message-content">Здравствуйте! Я ваш ИИ-помощник DeepSeek. Чем могу помочь в
+                                    проектировании процесса?</div>
+                                <div class="message-rating">
+                                    <button class="rate-btn up" title="Хороший ответ">👍🏻</button>
+                                    <button class="rate-btn down" title="Плохой ответ">👎🏻</button>
+                                </div>
+                            </div>
+                        `;
+                        const firstMsg = aiChatMessages.querySelector('.ai-message.assistant');
+                        if (firstMsg) {
+                            setupRatingButtons(firstMsg);
+                        }
+                    }
+                };
+
+                const documentAiMessage = (role, content) => {
+                    aiChatContext.push({ role, content });
+                };
+
+                const sendAiMessage = () => {
+                    const text = aiChatInput.value.trim();
+                    if (!text) return;
+
+                    appendMessage('user', text);
+                    documentAiMessage('user', text);
+
+                    aiChatInput.value = '';
+                    aiChatInput.style.height = 'auto';
+                    aiChatSendBtn.disabled = true;
+
+                    const loadingId = 'loading-' + Date.now();
+                    appendMessage('assistant', '...', loadingId);
+
+                    setTimeout(async () => {
+                        const loadingMsg = document.getElementById(loadingId);
+                        if (loadingMsg) {
+
+                            // Определяем, просит ли пользователь процесс или переименование
+                            const lowerText = text.toLowerCase();
+                            const isProcessRequest = lowerText.includes('процесс') || lowerText.includes('схем');
+                            const isRenameRequest = lowerText.includes('переименуй') || lowerText.includes('назови') || lowerText.includes('измени имя');
+
+                            let aiResponseText = "";
+
+                            if (isProcessRequest) {
+                                aiResponseText = `Для вашей задачи оптимально подойдет следующий линейный процесс анализа. Узлы соединены базовыми потоками.
+\`\`\`xml
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn2:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xsi:schemaLocation="http://www.omg.org/spec/BPMN/20100524/MODEL BPMN20.xsd" id="sample-diagram" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn2:process id="Process_Generated" isExecutable="false">
+    <bpmn2:startEvent id="StartEvent_1" name="Начало">
+      <bpmn2:outgoing>Flow_1</bpmn2:outgoing>
+    </bpmn2:startEvent>
+    <bpmn2:task id="Task_1" name="Анализ требований">
+      <bpmn2:incoming>Flow_1</bpmn2:incoming>
+      <bpmn2:outgoing>Flow_2</bpmn2:outgoing>
+    </bpmn2:task>
+    <bpmn2:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_1" />
+    <bpmn2:endEvent id="EndEvent_1" name="Конец">
+      <bpmn2:incoming>Flow_2</bpmn2:incoming>
+    </bpmn2:endEvent>
+    <bpmn2:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="EndEvent_1" />
+  </bpmn2:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_Generated">
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1">
+        <dc:Bounds x="152" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1">
+        <dc:Bounds x="240" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="188" y="120" />
+        <di:waypoint x="240" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <dc:Bounds x="392" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="340" y="120" />
+        <di:waypoint x="392" y="120" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn2:definitions>
+\`\`\`
+Вы можете отредактировать схему в центральной рабочей области.`;
+                            } else if (isRenameRequest) {
+                                // Извлекаем новое имя из контекста (упрощенная эвристика для демо)
+                                const words = text.split(' ');
+                                const newName = words[words.length - 1].replace(/["']/g, '');
+
+                                aiResponseText = `Понял вас. Я переименовал элемент задачи на схеме.
+\`\`\`json
+{
+  "action": "renameElement",
+  "targetElementType": "bpmn:Task",
+  "newName": "${newName}"
+}
+\`\`\`
+Проверьте изменения на главном холсте.`;
+                            } else {
+                                const mockResponses = [
+                                    "Конечно, я могу помочь с этим. Какие конкретно шаги процесса вас интересуют?",
+                                    "Для этой задачи лучше всего использовать шлюз типа XOR (исключающее ИЛИ). Хотите, я добавлю его на схему?",
+                                    "В BPMN это обычно моделируется через User Task, за которым следует Gateway для проверки результатов.",
+                                    "Я проанализировал ваш запрос. Рекомендую разбить эту задачу на две подзадачи для большей наглядности.",
+                                    "Учтено. Добавил рекомендации в 'Свойства' для этого элемента."
+                                ];
+                                aiResponseText = mockResponses[Math.floor(Math.random() * mockResponses.length)];
+                            }
+
+                            documentAiMessage('assistant', aiResponseText);
+
+                            // Прячем системный код от пользователя в чате, заменяя блок на красивое сообщение
+                            let displayHtml = escapeHtml(aiResponseText)
+                                .replace(/```xml([\s\S]*?)```/g, '<div style="margin-top: 8px; padding: 12px; background-color: #ecfdf5; border-radius: 8px; border-left: 4px solid #10b981; font-weight: 500; color: #065f46;"><svg style="vertical-align: text-bottom; margin-right: 6px;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>BPMN схема успешно сгенерирована и добавлена на холст.</div>')
+                                .replace(/```json([\s\S]*?)```/g, '<div style="margin-top: 8px; padding: 12px; background-color: #eff6ff; border-radius: 8px; border-left: 4px solid #3b82f6; font-weight: 500; color: #1e40af;"><svg style="vertical-align: text-bottom; margin-right: 6px;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Элемент на холсте обновлен.</div>');
+
+                            loadingMsg.innerHTML = `
+                                <div class="message-content">${displayHtml}</div>
+                                <div class="message-rating">
+                                    <button class="rate-btn up" title="Хороший ответ">👍🏻</button>
+                                    <button class="rate-btn down" title="Плохой ответ">👎🏻</button>
+                                </div>
+                            `;
+                            loadingMsg.removeAttribute('id');
+                            setupRatingButtons(loadingMsg);
+                            aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+
+                            // Парсим XML и рендерим на холсте, если есть
+                            const bpmnMatch = aiResponseText.match(/\`\`\`xml\s+([\s\S]*?)\s+\`\`\`/);
+                            if (bpmnMatch && bpmnMatch[1]) {
+                                const xmlString = bpmnMatch[1];
+                                try {
+                                    await bpmnViewer.importXML(xmlString);
+                                    bpmnViewer.get('canvas').zoom('fit-viewport', 'auto');
+                                    setupBpmnInteraction();
+                                } catch (err) {
+                                    console.error("Ошибка при попытке отрендерить сгенерированный BPMN", err);
+                                }
+                            }
+
+                            // Парсим JSON команды для изменения существующей схемы
+                            // Парсим JSON команд для изменения существующей схемы
+                            const jsonMatch = aiResponseText.match(/\`\`\`json\s+([\s\S]*?)\s+\`\`\`/);
+                            if (jsonMatch && jsonMatch[1]) {
+                                try {
+                                    const command = JSON.parse(jsonMatch[1]);
+                                    if (command.action === 'renameElement' && command.targetElementType && command.newName) {
+                                        const elementRegistry = bpmnViewer.get('elementRegistry');
+                                        const targetElement = elementRegistry.filter(el => el.type === command.targetElementType)[0];
+
+                                        if (targetElement) {
+                                            const modeling = bpmnViewer.get('modeling');
+
+                                            if (modeling) {
+                                                modeling.updateProperties(targetElement, {
+                                                    name: command.newName
+                                                });
+
+                                                const propNameInput = document.getElementById('prop-name');
+                                                if (propNameInput && !propNameInput.disabled) {
+                                                    propNameInput.value = command.newName;
+                                                }
+                                            } else {
+                                                console.error("Модуль modeling недоступен");
+                                            }
+                                        } else {
+                                            console.warn(`Элемент типа ${command.targetElementType} не найден на схеме для переименования.`);
+                                        }
+                                    }
+                                } catch (err) {
+                                    console.error("Ошибка при парсинге команд ИИ", err);
+                                }
+                            }
+                        }
+                    }, 1500);
+                };
+
+                aiChatSendBtn.addEventListener('click', sendAiMessage);
+                document.querySelectorAll('.ai-message.assistant').forEach(setupRatingButtons);
+            }
+
+            checkEmptyState();
+        });
+    </script>
+</body>
+
+</html>
