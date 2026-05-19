@@ -1227,6 +1227,305 @@
             cursor: not-allowed;
             opacity: 0.7;
         }
+
+        /* --- Просмотрщик текста документа DOCX --- */
+        #docxTextViewer {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px 40px;
+            background: #ffffff;
+            font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+            font-size: 13px;
+            line-height: 1.7;
+            color: #1f2937;
+            word-break: break-word;
+        }
+
+        #docxTextViewer.visible {
+            display: block;
+        }
+
+        /* Стили внутри просмотрщика — передают структуру Word-документа */
+        #docxTextViewer h1, #docxTextViewer h2, #docxTextViewer h3,
+        #docxTextViewer h4, #docxTextViewer h5, #docxTextViewer h6 {
+            font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+            color: #111827;
+            margin: 1.2em 0 0.4em;
+            line-height: 1.3;
+        }
+        #docxTextViewer h1 { font-size: 20px; border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; }
+        #docxTextViewer h2 { font-size: 17px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+        #docxTextViewer h3 { font-size: 15px; }
+        #docxTextViewer h4, #docxTextViewer h5, #docxTextViewer h6 { font-size: 13px; }
+
+        #docxTextViewer p {
+            margin: 0.4em 0;
+        }
+
+        #docxTextViewer strong, #docxTextViewer b { font-weight: 700; }
+        #docxTextViewer em, #docxTextViewer i { font-style: italic; }
+        #docxTextViewer u { text-decoration: underline; }
+
+        #docxTextViewer table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 12px 0;
+            font-size: 12.5px;
+        }
+        #docxTextViewer table td,
+        #docxTextViewer table th {
+            border: 1px solid #d1d5db;
+            padding: 6px 10px;
+            vertical-align: top;
+            word-break: break-word;
+        }
+        #docxTextViewer table th {
+            background-color: #f3f4f6;
+            font-weight: 600;
+        }
+        #docxTextViewer table tr:nth-child(even) td {
+            background-color: #fafafa;
+        }
+
+        #docxTextViewer ul, #docxTextViewer ol {
+            margin: 6px 0 6px 24px;
+            padding: 0;
+        }
+        #docxTextViewer li { margin: 2px 0; }
+
+        #docxTextViewer a { color: var(--primary-color); }
+
+        /* Выделенный текст с отклонением */
+        mark.text-deviation {
+            background-color: #fef08a;
+            border-radius: 2px;
+            cursor: pointer;
+            padding: 0 1px;
+            transition: background-color 0.2s;
+        }
+        mark.text-deviation:hover { background-color: #fde047; }
+
+        /* Лампочка отклонения в тексте */
+        .text-dev-lamp {
+            display: inline-block;
+            cursor: pointer;
+            font-size: 15px;
+            vertical-align: middle;
+            margin-left: 2px;
+            opacity: 0.85;
+            transition: opacity 0.15s, transform 0.15s;
+            line-height: 1;
+        }
+        .text-dev-lamp:hover { opacity: 1; transform: scale(1.2); }
+        .text-dev-lamp.hidden { display: none; }
+
+        /* Обёртка для попапа отклонения по тексту */
+        .text-dev-popup-wrap {
+            position: fixed;
+            z-index: 10000;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Контекстное меню для текстового вьюера */
+        .docx-ctx-menu {
+            position: fixed;
+            z-index: 9999;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+            padding: 6px 0;
+            min-width: 190px;
+            display: none;
+            font-family: var(--font-family);
+            font-size: 13.5px;
+        }
+        .docx-ctx-menu.visible {
+            display: block;
+        }
+        .docx-ctx-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 16px;
+            cursor: pointer;
+            color: #1f2937;
+            transition: background-color 0.15s;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+        .docx-ctx-item:hover {
+            background-color: #f3f4f6;
+        }
+        .docx-ctx-item.danger:hover {
+            background-color: #fef2f2;
+            color: #dc2626;
+        }
+        .docx-ctx-sep {
+            height: 1px;
+            background: #e5e7eb;
+            margin: 4px 0;
+        }
+
+        /* Попап создания отклонения по тексту */
+        .text-dev-popup {
+            position: fixed;
+            z-index: 10000;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+            padding: 20px;
+            width: 320px;
+            font-family: var(--font-family);
+            display: none;
+        }
+        .text-dev-popup.visible {
+            display: block;
+        }
+        .text-dev-popup-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #111827;
+            margin: 0 0 14px;
+        }
+        .text-dev-quote {
+            background: #fef9c3;
+            border-left: 3px solid #eab308;
+            border-radius: 4px;
+            padding: 8px 10px;
+            font-size: 12px;
+            color: #713f12;
+            margin-bottom: 14px;
+            max-height: 60px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+        }
+
+        .docx-viewer-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+            border-bottom: 1px solid #c7d2fe;
+            font-size: 13px;
+            font-weight: 600;
+            color: #3730a3;
+            flex-shrink: 0;
+        }
+
+        .docx-viewer-header svg {
+            flex-shrink: 0;
+        }
+
+        .docx-viewer-wrap {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .docx-viewer-wrap.visible {
+            display: flex;
+        }
+
+        /* --- Зона загрузки DOCX файла --- */
+        .docx-upload-zone {
+            border: 2px dashed #d1d5db;
+            border-radius: 12px;
+            padding: 20px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background-color 0.2s;
+            background-color: #fafafa;
+            position: relative;
+        }
+
+        .docx-upload-zone:hover,
+        .docx-upload-zone.drag-over {
+            border-color: var(--primary-color);
+            background-color: #eef2ff;
+        }
+
+        .docx-upload-zone input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+        }
+
+        .docx-upload-icon {
+            font-size: 28px;
+            margin-bottom: 6px;
+            display: block;
+            pointer-events: none;
+        }
+
+        .docx-upload-label {
+            font-size: 13px;
+            color: #6b7280;
+            pointer-events: none;
+            line-height: 1.4;
+        }
+
+        .docx-upload-label span {
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        .docx-file-selected {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background-color: #eef2ff;
+            border: 1px solid #c7d2fe;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+
+        .docx-file-icon {
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .docx-file-name {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 500;
+            color: #3730a3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .docx-file-remove {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #9ca3af;
+            font-size: 18px;
+            line-height: 1;
+            padding: 0 2px;
+            transition: color 0.15s;
+            flex-shrink: 0;
+        }
+
+        .docx-file-remove:hover {
+            color: #ef4444;
+        }
     </style>
 </head>
 
@@ -1246,9 +1545,22 @@
             <div class="modal-header">
                 <h2 class="modal-title">Новая задача валидации</h2>
             </div>
-            <div class="form-group" style="margin-bottom: 32px;">
+            <div class="form-group" style="margin-bottom: 20px;">
                 <label for="versionInput" class="form-label">Укажите версию процесса для валидации</label>
                 <input type="text" id="versionInput" class="form-input" placeholder="П____-__-__.__">
+            </div>
+            <div class="form-group" style="margin-bottom: 32px;">
+                <label class="form-label">Прикрепить документ процесса <span style="color:#9ca3af; font-weight:400;">(опционально)</span></label>
+                <div class="docx-upload-zone" id="docxUploadZone">
+                    <input type="file" id="docxFileInput" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" tabindex="-1">
+                    <span class="docx-upload-icon">📄</span>
+                    <div class="docx-upload-label"><span>Выберите файл</span> или перетащите сюда<br>.docx</div>
+                </div>
+                <div class="docx-file-selected" id="docxFileSelected" style="display:none;">
+                    <span class="docx-file-icon">📝</span>
+                    <span class="docx-file-name" id="docxFileName"></span>
+                    <button class="docx-file-remove" id="docxFileRemove" title="Удалить файл">×</button>
+                </div>
             </div>
             <div class="modal-actions" style="border-top: none; padding-top: 0; margin-top: 0;">
                 <button id="cancelBtn" class="btn btn-cancel">Отмена</button>
@@ -1341,6 +1653,16 @@
                                 </svg>
                             </button>
                             <div id="bpmn-canvas"></div>
+                        </div>
+
+                        <!-- Просмотр текста из DOCX (вместо BPMN если загружен файл) -->
+                        <div class="docx-viewer-wrap" id="docxViewerWrap">
+                            <div class="docx-viewer-header">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                                <span id="docxViewerFileName">Документ процесса</span>
+                            </div>
+                            <div id="docxTextViewer"></div>
+                        <!-- closing bpmnContainer below -->
                         </div>
 
                         <!-- Splitter горизонтальный -->
@@ -1471,7 +1793,25 @@
         </div>
     </template>
 
+    <!-- Контекстное меню для текстового вьюера -->
+    <div class="docx-ctx-menu" id="docxCtxMenu">
+        <button class="docx-ctx-item" id="docxCtxCopy">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Копировать текст
+        </button>
+        <div class="docx-ctx-sep"></div>
+        <button class="docx-ctx-item" id="docxCtxAddDev">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Создать отклонение
+        </button>
+    </div>
 
+    <!-- попап удалён, теперь используем bpmnDeviationPopupTemplate -->
+
+
+    <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+    <!-- Mammoth.js — конвертация DOCX → HTML с форматированием -->
+    <script src="https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js"></script>
     <!-- BPMN.io скрипт -->
     <script src="https://unpkg.com/bpmn-js@17.0.2/dist/bpmn-modeler.development.js"></script>
     <script>
@@ -1927,6 +2267,234 @@
                 });
             };
 
+            // ---- Логика выделения текста в документе ----
+            const docxCtxMenu = document.getElementById('docxCtxMenu');
+            const docxCtxCopy = document.getElementById('docxCtxCopy');
+            const docxCtxAddDev = document.getElementById('docxCtxAddDev');
+
+            let savedRange = null;
+            let savedSelText = '';
+            let activeTextPopupWrap = null;
+            const textDeviations = {};
+
+            const hideDocxCtxMenu = () => docxCtxMenu.classList.remove('visible');
+            const closeActiveTextPopup = () => {
+                if (activeTextPopupWrap) { activeTextPopupWrap.remove(); activeTextPopupWrap = null; }
+            };
+
+            document.addEventListener('click', (e) => {
+                if (!docxCtxMenu.contains(e.target)) hideDocxCtxMenu();
+                if (activeTextPopupWrap && !activeTextPopupWrap.contains(e.target)) closeActiveTextPopup();
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') { hideDocxCtxMenu(); closeActiveTextPopup(); }
+            });
+
+            const highlightRange = (range, rowId) => {
+                const ancestor = range.commonAncestorContainer;
+
+                // Простой случай: выделение внутри одного текстового узла
+                if (range.startContainer === range.endContainer &&
+                    range.startContainer.nodeType === Node.TEXT_NODE) {
+                    const mark = document.createElement('mark');
+                    mark.className = 'text-deviation';
+                    mark.dataset.deviationId = rowId;
+                    range.surroundContents(mark);
+                    return mark;
+                }
+
+                // Сложный случай: выделение пересекает элементы — оборачиваем каждый текстовый узел
+                const walker = document.createTreeWalker(
+                    ancestor.nodeType === Node.TEXT_NODE ? ancestor.parentNode : ancestor,
+                    NodeFilter.SHOW_TEXT,
+                    null
+                );
+
+                const textNodes = [];
+                let n;
+                while ((n = walker.nextNode())) {
+                    const cmp1 = range.comparePoint(n, 0);
+                    const cmp2 = range.comparePoint(n, n.length);
+                    // Узел пересекается с диапазоном если не полностью до или после него
+                    if (cmp1 <= 0 && cmp2 >= 0) textNodes.push(n);
+                    else if (cmp1 === 0 || cmp2 === 0) textNodes.push(n);
+                    else if (cmp1 < 0 && cmp2 > 0) textNodes.push(n);
+                }
+
+                let lastMark = null;
+                textNodes.forEach(textNode => {
+                    const nodeRange = document.createRange();
+                    nodeRange.selectNodeContents(textNode);
+                    if (textNode === range.startContainer) nodeRange.setStart(textNode, range.startOffset);
+                    if (textNode === range.endContainer) nodeRange.setEnd(textNode, range.endOffset);
+                    if (nodeRange.collapsed) return;
+                    const mark = document.createElement('mark');
+                    mark.className = 'text-deviation';
+                    mark.dataset.deviationId = rowId;
+                    nodeRange.surroundContents(mark);
+                    lastMark = mark;
+                });
+
+                return lastMark;
+            };
+
+            // Клик по лампочке — "Список отклонений" рядом с лампочкой (как BPMN-попап)
+            const docxTextViewerEl = document.getElementById('docxTextViewer');
+            docxTextViewerEl.addEventListener('click', (e) => {
+                const lamp = e.target.closest('.text-dev-lamp');
+                if (!lamp) return;
+                e.stopPropagation();
+                closeActiveTextPopup();
+
+                const rowId = lamp.dataset.rowId;
+                const devs = textDeviations[rowId] || [];
+                if (!devs.length) return;
+
+                const tpl = document.getElementById('bpmnWarningPopupTemplate');
+                const pc = tpl.content.cloneNode(true).firstElementChild;
+                const list = pc.querySelector('.bpmn-warning-list');
+
+                const renderList = () => {
+                    list.innerHTML = '';
+                    const current = textDeviations[rowId] || [];
+                    if (!current.length) { closeActiveTextPopup(); return; }
+                    current.forEach((dev, idx) => {
+                        const sevText = dev.severity === 'error' ? 'Ошибка' : 'Рекомендация';
+                        const item = document.createElement('div');
+                        item.className = `bpmn-warning-item severity-${dev.severity}`;
+                        item.innerHTML = `
+                            <div class="bpmn-warning-item-header">
+                                <div class="bpmn-warning-item-desc">${escapeHtml(dev.desc)}</div>
+                                <button class="bpmn-warning-item-del-btn" title="Удалить отклонение">-</button>
+                            </div>
+                            <div class="bpmn-warning-item-sev"><span style="font-family:monospace;font-weight:600">ERR-H</span> / ${sevText}</div>`;
+                        item.querySelector('.bpmn-warning-item-del-btn').addEventListener('click', () => {
+                            // Удаляем из памяти
+                            textDeviations[rowId].splice(idx, 1);
+                            // Удаляем строку из таблицы
+                            const tr = document.querySelector(`tr[data-row-id="${rowId}"]`);
+                            if (tr) { tr.remove(); checkEmptyState(); }
+                            // Если отклонений не осталось — убираем подсветку и лампочку
+                            if (!textDeviations[rowId].length) {
+                                const mark = docxTextViewerEl.querySelector(`mark[data-deviation-id="${rowId}"]`);
+                                if (mark) { while (mark.firstChild) mark.parentNode.insertBefore(mark.firstChild, mark); mark.remove(); }
+                                lamp.remove();
+                                closeActiveTextPopup();
+                            } else {
+                                renderList();
+                            }
+                        });
+                        list.appendChild(item);
+                    });
+                };
+                renderList();
+
+                pc.querySelector('.popup-close-btn').addEventListener('click', closeActiveTextPopup);
+
+                // Позиционируем рядом с лампочкой
+                const wrap = document.createElement('div');
+                wrap.style.cssText = 'position:fixed;z-index:10000;';
+                wrap.addEventListener('click', (ev) => ev.stopPropagation());
+                wrap.appendChild(pc);
+                document.body.appendChild(wrap);
+                activeTextPopupWrap = wrap;
+
+                const rect = lamp.getBoundingClientRect();
+                const vw = window.innerWidth, vh = window.innerHeight;
+                wrap.style.visibility = 'hidden';
+                requestAnimationFrame(() => {
+                    const pw = wrap.offsetWidth, ph = wrap.offsetHeight;
+                    let x = rect.right + 8;
+                    let y = rect.top;
+                    if (x + pw > vw) x = rect.left - pw - 8;
+                    if (y + ph > vh) y = vh - ph - 8;
+                    wrap.style.left = Math.max(4, x) + 'px';
+                    wrap.style.top = Math.max(4, y) + 'px';
+                    wrap.style.visibility = '';
+                });
+            });
+            docxTextViewerEl.addEventListener('contextmenu', (e) => {
+                const sel = window.getSelection();
+                const selText = sel ? sel.toString().trim() : '';
+                if (!selText) return; // если ничего не выделено — стандартное меню
+
+                e.preventDefault();
+                savedSelText = selText;
+                // Сохраняем Range до закрытия попапа
+                if (sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
+
+                // Позиционируем меню
+                const vw = window.innerWidth, vh = window.innerHeight;
+                let x = e.clientX + 4, y = e.clientY + 4;
+                docxCtxMenu.classList.add('visible');
+                const mw = docxCtxMenu.offsetWidth, mh = docxCtxMenu.offsetHeight;
+                if (x + mw > vw) x = vw - mw - 8;
+                if (y + mh > vh) y = vh - mh - 8;
+                docxCtxMenu.style.left = x + 'px';
+                docxCtxMenu.style.top = y + 'px';
+            });
+
+            // Копировать
+            docxCtxCopy.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (savedSelText) navigator.clipboard.writeText(savedSelText).catch(() => {});
+                hideDocxCtxMenu();
+            });
+
+            // Создать отклонение — выделить + лампочка + попап из шаблона
+            docxCtxAddDev.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideDocxCtxMenu();
+                if (!savedSelText || !savedRange) return;
+                const rowId = 'dev_txt_' + Date.now();
+                const quoteText = savedSelText;
+
+                const mark = highlightRange(savedRange, rowId);
+                savedRange = null;
+
+                const lamp = document.createElement('span');
+                lamp.className = 'text-dev-lamp hidden';
+                lamp.textContent = '💡';
+                lamp.title = 'Просмотр отклонений';
+                lamp.dataset.rowId = rowId;
+                mark.after(lamp);
+
+                closeActiveTextPopup();
+                const tpl = document.getElementById('bpmnDeviationPopupTemplate');
+                const pc = tpl.content.cloneNode(true).firstElementChild;
+                const descInput = pc.querySelector('.bpmn-popup-desc');
+                const sevSelect = pc.querySelector('.bpmn-popup-severity');
+                const wrap = document.createElement('div');
+                wrap.className = 'text-dev-popup-wrap';
+                wrap.appendChild(pc);
+                // Останавливаем всплытие — иначе document-click сразу закроет попап
+                wrap.addEventListener('click', (ev) => ev.stopPropagation());
+                document.body.appendChild(wrap);
+                activeTextPopupWrap = wrap;
+
+                pc.querySelector('.popup-cancel-btn').addEventListener('click', () => {
+                    if (mark.parentNode) { while (mark.firstChild) mark.parentNode.insertBefore(mark.firstChild, mark); mark.remove(); }
+                    lamp.remove();
+                    closeActiveTextPopup();
+                    savedSelText = '';
+                });
+
+                pc.querySelector('.popup-save-btn').addEventListener('click', () => {
+                    const desc = descInput.value.trim();
+                    const severity = sevSelect.value;
+                    lamp.classList.remove('hidden');
+                    if (!textDeviations[rowId]) textDeviations[rowId] = [];
+                    textDeviations[rowId].push({ desc: desc || quoteText.slice(0, 120), severity });
+                    addDeviationRow(desc || quoteText.slice(0, 120), 'Текст документа', quoteText.slice(0, 80), severity, rowId, null);
+                    const dc = document.querySelector('.table-container');
+                    if (dc) dc.scrollTop = dc.scrollHeight;
+                    closeActiveTextPopup();
+                    savedSelText = '';
+                    window.getSelection()?.removeAllRanges();
+                });
+                setTimeout(() => descInput.focus(), 50);
+            });
+
             // ---- Динамическое изменение размеров (Splitter Drag-and-Drop) ----
             const leftPanel = document.getElementById('leftPanel');
             const rightPanel = document.getElementById('rightPanel');
@@ -2304,9 +2872,149 @@
             // ---- Логика первого окна ----
             let prevValue = '';
 
+            // ---- Логика загрузки DOCX ----
+            const docxUploadZone = document.getElementById('docxUploadZone');
+            const docxFileInput = document.getElementById('docxFileInput');
+            const docxFileSelected = document.getElementById('docxFileSelected');
+            const docxFileName = document.getElementById('docxFileName');
+            const docxFileRemove = document.getElementById('docxFileRemove');
+            let selectedDocxFile = null;
+            let docxExtractedHtml = null;
+
+            // Вспомогательная функция: извлечь текст из XML-элемента <w:tc>
+            const getCellText = (tcEl) => {
+                return Array.from(tcEl.querySelectorAll('w\\:t, t'))
+                    .map(t => t.textContent)
+                    .join('')
+                    .trim();
+            };
+
+            // Извлекает весь текст документа из XML (абзацы + ячейки таблиц)
+            const extractDocxText = (doc) => {
+                const paragraphs = doc.querySelectorAll('p');
+                const lines = [];
+                paragraphs.forEach(p => {
+                    const text = Array.from(p.querySelectorAll('t'))
+                        .map(t => t.textContent)
+                        .join('');
+                    lines.push(text);
+                });
+                // Убираем длинные цепочки пустых строк
+                return lines
+                    .join('\n')
+                    .replace(/\n{4,}/g, '\n\n\n')
+                    .trim();
+            };
+
+            // Парсит docx: извлекает версию (через JSZip/XML) и HTML (через mammoth.js)
+            const parseDocxVersion = async (file) => {
+                try {
+                    const zip = await JSZip.loadAsync(file);
+                    const docXml = await zip.file('word/document.xml').async('string');
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(docXml, 'application/xml');
+
+                    // Ищем версию в строках таблиц
+                    const rows = doc.querySelectorAll('tr');
+                    for (const row of rows) {
+                        const cells = row.querySelectorAll('tc');
+                        if (cells.length >= 2) {
+                            const leftText = getCellText(cells[0]);
+                            if (leftText.toLowerCase().includes('номер версии процесса')) {
+                                const versionRaw = getCellText(cells[1]);
+                                const match = versionRaw.match(/П\d{4}-\d{2}-\d{2}\.\d{2}/);
+                                if (match) return match[0];
+                                if (versionRaw.length > 0) return versionRaw;
+                            }
+                        }
+                    }
+                    return null;
+                } catch (err) {
+                    console.error('Ошибка извлечения версии:', err);
+                    return null;
+                }
+            };
+
+            // Конвертирует docx в HTML через mammoth.js
+            const convertDocxToHtml = async (file) => {
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const result = await mammoth.convertToHtml({ arrayBuffer });
+                    return result.value || '';
+                } catch (err) {
+                    console.error('Ошибка конвертации DOCX → HTML:', err);
+                    return '<p>Не удалось отобразить документ.</p>';
+                }
+            };
+
+            const showDocxFile = async (file) => {
+                selectedDocxFile = file;
+                docxFileName.textContent = file.name;
+                docxFileSelected.style.display = 'flex';
+                docxUploadZone.style.display = 'none';
+
+                // Параллельно: извлекаем версию (JSZip) и HTML (mammoth)
+                const [version, html] = await Promise.all([
+                    parseDocxVersion(file),
+                    convertDocxToHtml(file)
+                ]);
+
+                docxExtractedHtml = html;
+
+                if (version) {
+                    input.value = version;
+                    prevValue = version;
+                    validateInput();
+                    input.style.transition = 'background-color 0.4s';
+                    input.style.backgroundColor = '#eef2ff';
+                    setTimeout(() => { input.style.backgroundColor = ''; }, 1500);
+                }
+            };
+
+            const clearDocxFile = () => {
+                selectedDocxFile = null;
+                docxExtractedHtml = null;
+                docxFileInput.value = '';
+                docxFileSelected.style.display = 'none';
+                docxUploadZone.style.display = '';
+            };
+
+            docxFileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                if (!file.name.toLowerCase().endsWith('.docx')) {
+                    alert('Пожалуйста, выберите файл формата .docx');
+                    docxFileInput.value = '';
+                    return;
+                }
+                showDocxFile(file);
+            });
+
+            docxFileRemove.addEventListener('click', clearDocxFile);
+
+            docxUploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                docxUploadZone.classList.add('drag-over');
+            });
+            docxUploadZone.addEventListener('dragleave', () => {
+                docxUploadZone.classList.remove('drag-over');
+            });
+            docxUploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                docxUploadZone.classList.remove('drag-over');
+                const file = e.dataTransfer.files[0];
+                if (!file) return;
+                if (!file.name.toLowerCase().endsWith('.docx')) {
+                    alert('Пожалуйста, перетащите файл формата .docx');
+                    return;
+                }
+                showDocxFile(file);
+            });
+
             openBtn.addEventListener('click', () => {
                 input.value = 'П';
                 prevValue = 'П';
+                clearDocxFile();
                 validateInput();
                 validationModal.classList.add('active');
 
@@ -2425,10 +3133,40 @@
                     bpmnContainerEl.style.height = "auto";
                 }
 
+                // Режим отображения: текст документа или BPMN-схема
+                const bpmnCanvas = document.getElementById('bpmn-canvas');
+                const simulateBtnEl = document.getElementById('simulateBtn');
+                const bugBtnEl = document.getElementById('bugBtn');
+                const docxViewerWrap = document.getElementById('docxViewerWrap');
+                const docxTextViewerEl = document.getElementById('docxTextViewer');
+                const docxViewerFileName = document.getElementById('docxViewerFileName');
+
+                if (selectedDocxFile && docxExtractedHtml && mode === 'validation') {
+                    // Показываем HTML документа, скрываем BPMN
+                    if (bpmnCanvas) bpmnCanvas.style.display = 'none';
+                    if (simulateBtnEl) simulateBtnEl.style.display = 'none';
+                    if (bugBtnEl) bugBtnEl.style.display = 'none';
+                    if (bpmnContainerEl) bpmnContainerEl.style.display = 'none';
+                    if (docxViewerWrap) docxViewerWrap.classList.add('visible');
+                    if (docxTextViewerEl) {
+                        docxTextViewerEl.classList.add('visible');
+                        docxTextViewerEl.innerHTML = docxExtractedHtml;
+                    }
+                    if (docxViewerFileName) docxViewerFileName.textContent = selectedDocxFile.name;
+                } else {
+                    // Показываем BPMN, скрываем текстовый просмотрщик
+                    if (bpmnCanvas) bpmnCanvas.style.display = '';
+                    if (simulateBtnEl) simulateBtnEl.style.display = '';
+                    if (bugBtnEl) bugBtnEl.style.display = '';
+                    if (bpmnContainerEl) bpmnContainerEl.style.display = '';
+                    if (docxViewerWrap) docxViewerWrap.classList.remove('visible');
+                    if (docxTextViewerEl) docxTextViewerEl.classList.remove('visible');
+                }
+
                 setTimeout(() => {
                     secondModal.classList.add('active');
                     initResize();
-                    renderBpmn(mode);
+                    if (!selectedDocxFile || mode !== 'validation') renderBpmn(mode);
                 }, 150);
             };
 
